@@ -1,0 +1,37 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+!.mvn/wrapper/maven-wrapper.properties
+
+# Spring Boot
+*.log
+logs/
+
+# Node.js / Frontend
+node_modules/
+dist/
+.vite/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / Secrets
+*.env
+.env.local
+.env.*.local
+
+# Docker volumes
+mysql_data/
