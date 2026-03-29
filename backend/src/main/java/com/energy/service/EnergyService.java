@@ -229,17 +229,10 @@ public class EnergyService {
     private String buildContextString(String buildingId, double totalPower, double totalWater,
                                        double totalCarbon, double totalAc, double avgPower,
                                        int dataPoints, int anomalyCount) {
-        return String.format("""
-                建筑ID: %s
-                数据记录数: %d
-                总电力消耗: %.2f kWh
-                总水能耗: %.2f m³
-                总碳排放: %.2f kg
-                空调总能耗: %.2f kWh
-                平均电力消耗: %.2f kWh
-                异常记录数: %d
-                能效比(空调/总电力): %.1f%%
-                """,
+        return String.format(
+                "建筑ID: %s\n数据记录数: %d\n总电力消耗: %.2f kWh\n" +
+                "总水能耗: %.2f m3\n总碳排放: %.2f kg\n空调总能耗: %.2f kWh\n" +
+                "平均电力消耗: %.2f kWh\n异常记录数: %d\n能效比(空调/总电力): %.1f%%",
                 buildingId, dataPoints, totalPower, totalWater, totalCarbon,
                 totalAc, avgPower, anomalyCount,
                 totalPower > 0 ? totalAc / totalPower * 100 : 0);

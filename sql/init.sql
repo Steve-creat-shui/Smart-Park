@@ -70,10 +70,9 @@ DROP PROCEDURE IF EXISTS generate_energy_data$$
 CREATE PROCEDURE generate_energy_data()
 BEGIN
     DECLARE v_building VARCHAR(10);
-    DECLARE v_btype VARCHAR(20);
+    DECLARE v_base_power DOUBLE;
     DECLARE v_day_offset INT DEFAULT 0;
     DECLARE v_hour INT;
-    DECLARE v_base_power DOUBLE;
     DECLARE v_power DOUBLE;
     DECLARE v_water DOUBLE;
     DECLARE v_carbon DOUBLE;
@@ -84,17 +83,17 @@ BEGIN
     DECLARE v_humidity DOUBLE;
     DECLARE v_status VARCHAR(20);
     DECLARE v_ts DATETIME;
+    DECLARE v_bidx INT DEFAULT 1;
 
-    -- 为每栋楼生成180天 * 每天4个时间点的数据
-    SET @buildings = 'B001,B002,B003,B004,B005,B006';
-    SET @btypes = '办公楼,办公楼,研发楼,综合楼,数据中心,餐饮楼';
-    SET @base_powers = '280,220,180,150,350,120';
-
-    SET @bidx = 1;
-    WHILE @bidx <= 6 DO
-        SET v_building = SUBSTRING_INDEX(SUBSTRING_INDEX(@buildings, ',', @bidx), ',', -1);
-        SET v_btype = SUBSTRING_INDEX(SUBSTRING_INDEX(@btypes, ',', @bidx), ',', -1);
-        SET v_base_power = CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(@base_powers, ',', @bidx), ',', -1) AS DECIMAL(10,2));
+    WHILE v_bidx <= 6 DO
+        CASE v_bidx
+            WHEN 1 THEN SET v_building = 'B001'; SET v_base_power = 280;
+            WHEN 2 THEN SET v_building = 'B002'; SET v_base_power = 220;
+            WHEN 3 THEN SET v_building = 'B003'; SET v_base_power = 180;
+            WHEN 4 THEN SET v_building = 'B004'; SET v_base_power = 150;
+            WHEN 5 THEN SET v_building = 'B005'; SET v_base_power = 350;
+            WHEN 6 THEN SET v_building = 'B006'; SET v_base_power = 120;
+        END CASE;
 
         SET v_day_offset = 0;
         WHILE v_day_offset < 180 DO
@@ -140,7 +139,9 @@ BEGIN
                      lighting_consumption_kwh, other_consumption_kwh,
                      temperature_celsius, humidity_percent, occupancy_rate, status)
                 VALUES (
-                    v_building, v_btype, v_ts,
+                    v_building,
+                    (SELECT building_type FROM buildings WHERE building_id = v_building),
+                    v_ts,
                     ROUND(v_power, 2), ROUND(v_water, 2),
                     ROUND(v_carbon, 2), ROUND(v_ac, 2),
                     ROUND(v_lighting, 2), ROUND(GREATEST(v_other, 0), 2),
@@ -152,7 +153,7 @@ BEGIN
             END WHILE;
             SET v_day_offset = v_day_offset + 1;
         END WHILE;
-        SET @bidx = @bidx + 1;
+        SET v_bidx = v_bidx + 1;
     END WHILE;
 END$$
 
