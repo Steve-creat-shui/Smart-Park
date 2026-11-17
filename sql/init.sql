@@ -52,13 +52,14 @@ CREATE TABLE IF NOT EXISTS energy_consumption (
 -- ============================================
 -- 插入建筑基础数据
 -- ============================================
-INSERT IGNORE INTO buildings VALUES
-('B001', '科技园A栋', '办公楼', 12, 15000.0, '深圳市南山区科技园', 2015, 'A', '中央空调', 'active', NOW()),
-('B002', '科技园B栋', '办公楼', 10, 12000.0, '深圳市南山区科技园', 2016, 'B', '中央空调', 'active', NOW()),
-('B003', '研发中心', '研发楼', 8,  9500.0,  '深圳市南山区科技园', 2018, 'A', '变频中央空调', 'active', NOW()),
-('B004', '综合服务楼', '综合楼', 6, 8000.0,  '深圳市南山区科技园', 2017, 'C', '分体空调', 'active', NOW()),
-('B005', '数据中心', '数据中心', 4, 5000.0,  '深圳市南山区科技园', 2020, 'A+', '精密空调', 'active', NOW()),
-('B006', '员工食堂', '餐饮楼', 3, 3500.0,   '深圳市南山区科技园', 2016, 'B', '分体空调', 'active', NOW());
+REPLACE INTO buildings VALUES
+('B001', '行政楼',     '行政楼', 8,  10000.0, '校区中心',   2010, 'A',  '中央空调',     'active', NOW()),
+('B002', '图书馆',     '图书馆', 5,  8000.0,  '校区东区',   2012, 'A',  '变频中央空调', 'active', NOW()),
+('B003', '实验楼',     '实验楼', 6,  9500.0,  '校区西区',   2015, 'B',  '变频中央空调', 'active', NOW()),
+('B004', '教学楼',     '教学楼', 10, 15000.0, '校区中心',   2008, 'B',  '中央空调',     'active', NOW()),
+('B005', '宿舍楼',     '宿舍楼', 12, 20000.0, '校区北区',   2009, 'C',  '分体空调',     'active', NOW()),
+('B006', '餐厅',       '餐厅',   3,  4000.0,  '校区南区',   2011, 'B',  '分体空调',     'active', NOW()),
+('B007', '室内体育馆', '体育馆', 2,  12000.0, '校区东南区', 2018, 'A',  '中央空调',     'active', NOW());
 
 -- ============================================
 -- 插入近12个月能耗测试数据（B001 ~ B006）
@@ -69,69 +70,94 @@ DELIMITER $$
 DROP PROCEDURE IF EXISTS generate_energy_data$$
 CREATE PROCEDURE generate_energy_data()
 BEGIN
-    DECLARE v_building VARCHAR(10);
+    DECLARE v_bidx       INT DEFAULT 1;
+    DECLARE v_building   VARCHAR(10);
     DECLARE v_base_power DOUBLE;
-    DECLARE v_day_offset INT DEFAULT 0;
-    DECLARE v_hour INT;
-    DECLARE v_power DOUBLE;
-    DECLARE v_water DOUBLE;
-    DECLARE v_carbon DOUBLE;
-    DECLARE v_ac DOUBLE;
-    DECLARE v_lighting DOUBLE;
-    DECLARE v_other DOUBLE;
-    DECLARE v_temp DOUBLE;
-    DECLARE v_humidity DOUBLE;
-    DECLARE v_status VARCHAR(20);
-    DECLARE v_ts DATETIME;
-    DECLARE v_bidx INT DEFAULT 1;
+    DECLARE v_day        INT DEFAULT 0;
+    DECLARE v_hour       INT;
+    DECLARE v_month      INT;
+    DECLARE v_season_factor DOUBLE;
+    DECLARE v_ac_ratio   DOUBLE;
+    DECLARE v_power      DOUBLE;
+    DECLARE v_water      DOUBLE;
+    DECLARE v_carbon     DOUBLE;
+    DECLARE v_ac         DOUBLE;
+    DECLARE v_lighting   DOUBLE;
+    DECLARE v_other      DOUBLE;
+    DECLARE v_temp       DOUBLE;
+    DECLARE v_humidity   DOUBLE;
+    DECLARE v_status     VARCHAR(20);
+    DECLARE v_ts         DATETIME;
 
-    WHILE v_bidx <= 6 DO
+    TRUNCATE TABLE energy_consumption;
+
+    WHILE v_bidx <= 7 DO
         CASE v_bidx
-            WHEN 1 THEN SET v_building = 'B001'; SET v_base_power = 280;
-            WHEN 2 THEN SET v_building = 'B002'; SET v_base_power = 220;
-            WHEN 3 THEN SET v_building = 'B003'; SET v_base_power = 180;
-            WHEN 4 THEN SET v_building = 'B004'; SET v_base_power = 150;
-            WHEN 5 THEN SET v_building = 'B005'; SET v_base_power = 350;
+            WHEN 1 THEN SET v_building = 'B001'; SET v_base_power = 200;
+            WHEN 2 THEN SET v_building = 'B002'; SET v_base_power = 180;
+            WHEN 3 THEN SET v_building = 'B003'; SET v_base_power = 250;
+            WHEN 4 THEN SET v_building = 'B004'; SET v_base_power = 300;
+            WHEN 5 THEN SET v_building = 'B005'; SET v_base_power = 150;
             WHEN 6 THEN SET v_building = 'B006'; SET v_base_power = 120;
+            WHEN 7 THEN SET v_building = 'B007'; SET v_base_power = 160;
         END CASE;
 
-        SET v_day_offset = 0;
-        WHILE v_day_offset < 180 DO
-            SET v_hour = 8;
-            WHILE v_hour <= 22 DO
-                SET v_ts = DATE_SUB(NOW(), INTERVAL (180 - v_day_offset) DAY) + INTERVAL v_hour HOUR;
+        SET v_day = 0;
+        WHILE v_day < 365 DO
+            SET v_ts    = DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 364 DAY), INTERVAL v_day DAY);
+            SET v_month = MONTH(v_ts);
 
-                -- 根据时段计算能耗
-                IF v_hour BETWEEN 9 AND 11 OR v_hour BETWEEN 14 AND 17 THEN
-                    SET v_power = v_base_power * (0.85 + RAND() * 0.4);
-                ELSEIF v_hour BETWEEN 12 AND 13 THEN
-                    SET v_power = v_base_power * (0.5 + RAND() * 0.2);
-                ELSEIF v_hour >= 20 THEN
-                    SET v_power = v_base_power * (0.2 + RAND() * 0.15);
+            CASE
+                WHEN v_month IN (6,7,8) THEN
+                    SET v_season_factor = 1.4; SET v_ac_ratio = 0.55;
+                    SET v_temp = 28 + RAND()*8;  SET v_humidity = 65 + RAND()*20;
+                WHEN v_month IN (12,1,2) THEN
+                    SET v_season_factor = 1.2; SET v_ac_ratio = 0.15;
+                    SET v_temp = 2  + RAND()*10; SET v_humidity = 40 + RAND()*20;
+                WHEN v_month IN (3,4,5) THEN
+                    SET v_season_factor = 1.0; SET v_ac_ratio = 0.25;
+                    SET v_temp = 12 + RAND()*10; SET v_humidity = 55 + RAND()*20;
                 ELSE
-                    SET v_power = v_base_power * (0.6 + RAND() * 0.25);
+                    SET v_season_factor = 1.1; SET v_ac_ratio = 0.30;
+                    SET v_temp = 16 + RAND()*10; SET v_humidity = 50 + RAND()*20;
+            END CASE;
+
+            SET v_hour = 0;
+            WHILE v_hour < 24 DO
+                SET v_ts = DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 364 DAY), INTERVAL v_day DAY), INTERVAL v_hour HOUR);
+
+                IF v_hour BETWEEN 8 AND 11 OR v_hour BETWEEN 14 AND 17 THEN
+                    SET v_power = v_base_power * v_season_factor * (0.85 + RAND()*0.30);
+                ELSEIF v_hour BETWEEN 12 AND 13 THEN
+                    SET v_power = v_base_power * v_season_factor * (0.50 + RAND()*0.15);
+                ELSEIF v_hour BETWEEN 18 AND 21 THEN
+                    SET v_power = v_base_power * v_season_factor * (0.40 + RAND()*0.20);
+                ELSEIF v_hour >= 22 OR v_hour <= 5 THEN
+                    SET v_power = v_base_power * v_season_factor * (0.10 + RAND()*0.10);
+                ELSE
+                    SET v_power = v_base_power * v_season_factor * (0.60 + RAND()*0.20);
                 END IF;
 
-                -- 数据中心全天高负载
-                IF v_building = 'B005' THEN
-                    SET v_power = v_base_power * (0.9 + RAND() * 0.2);
+                IF v_building = 'B005' AND (v_hour >= 22 OR v_hour <= 5) THEN
+                    SET v_power = v_base_power * v_season_factor * (0.30 + RAND()*0.15);
                 END IF;
 
-                -- 偶发性异常（约5%概率）
+                IF v_building = 'B006' AND v_hour IN (7,8,11,12,17,18) THEN
+                    SET v_power = v_base_power * v_season_factor * (1.20 + RAND()*0.30);
+                END IF;
+
                 IF RAND() < 0.05 THEN
-                    SET v_power = v_power * (1.6 + RAND() * 0.5);
+                    SET v_power  = v_power * (1.6 + RAND()*0.5);
                     SET v_status = 'warning';
                 ELSE
                     SET v_status = 'normal';
                 END IF;
 
-                SET v_ac = v_power * (0.40 + RAND() * 0.15);
-                SET v_lighting = v_power * (0.15 + RAND() * 0.08);
-                SET v_other = v_power - v_ac - v_lighting;
-                SET v_water = v_power * (0.008 + RAND() * 0.004);
-                SET v_carbon = v_power * 0.785;
-                SET v_temp = 20 + RAND() * 12;
-                SET v_humidity = 45 + RAND() * 35;
+                SET v_ac       = v_power * v_ac_ratio;
+                SET v_lighting = v_power * (0.12 + RAND()*0.06);
+                SET v_other    = GREATEST(v_power - v_ac - v_lighting, 0);
+                SET v_water    = v_power * (0.006 + RAND()*0.004);
+                SET v_carbon   = v_power * 0.785;
 
                 INSERT INTO energy_consumption
                     (building_id, building_type, timestamp, power_consumption_kwh,
@@ -142,16 +168,16 @@ BEGIN
                     v_building,
                     (SELECT building_type FROM buildings WHERE building_id = v_building),
                     v_ts,
-                    ROUND(v_power, 2), ROUND(v_water, 2),
-                    ROUND(v_carbon, 2), ROUND(v_ac, 2),
-                    ROUND(v_lighting, 2), ROUND(GREATEST(v_other, 0), 2),
-                    ROUND(v_temp, 1), ROUND(v_humidity, 1),
-                    ROUND(0.5 + RAND() * 0.5, 2), v_status
+                    ROUND(v_power, 2),   ROUND(v_water, 2),
+                    ROUND(v_carbon, 2),  ROUND(v_ac, 2),
+                    ROUND(v_lighting,2), ROUND(v_other, 2),
+                    ROUND(v_temp, 1),    ROUND(v_humidity, 1),
+                    ROUND(0.4 + RAND()*0.6, 2), v_status
                 );
 
-                SET v_hour = v_hour + 4;
+                SET v_hour = v_hour + 2;
             END WHILE;
-            SET v_day_offset = v_day_offset + 1;
+            SET v_day = v_day + 1;
         END WHILE;
         SET v_bidx = v_bidx + 1;
     END WHILE;

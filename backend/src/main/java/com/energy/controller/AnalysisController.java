@@ -4,6 +4,7 @@ import com.energy.dto.ApiResponse;
 import com.energy.dto.EnergyAnalysisRequest;
 import com.energy.dto.EnergyAnalysisResponse;
 import com.energy.service.ClaudeService;
+import com.energy.service.CozeService;
 import com.energy.service.EnergyService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +18,7 @@ import java.util.Map;
 public class AnalysisController {
 
     private final EnergyService energyService;
+    private final CozeService cozeService;
     private final ClaudeService claudeService;
 
     @PostMapping("/energy-analysis")
@@ -32,7 +34,9 @@ public class AnalysisController {
         String buildingId = body.getOrDefault("buildingId", "");
         String query = body.getOrDefault("query", "");
         String contextData = body.getOrDefault("contextData", "");
-        String result = claudeService.analyzeEnergyData(contextData, query);
+        String result = cozeService.isConfigured()
+                ? cozeService.analyzeEnergyData(contextData, query)
+                : claudeService.analyzeEnergyData(contextData, query);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "buildingId", buildingId,
                 "query", query,
@@ -52,7 +56,9 @@ public class AnalysisController {
                 analysis.getTotalPowerConsumption() != null ? analysis.getTotalPowerConsumption() : 0,
                 analysis.getAnomalies() != null ? analysis.getAnomalies().size() : 0,
                 analysis.getAvgPowerConsumption() != null ? analysis.getAvgPowerConsumption() : 0);
-        String result = claudeService.getEnergyIssueAnalysis(buildingId, timeRange, contextData);
+        String result = cozeService.isConfigured()
+                ? cozeService.getEnergyIssueAnalysis(buildingId, timeRange, contextData)
+                : claudeService.getEnergyIssueAnalysis(buildingId, timeRange, contextData);
         return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "buildingId", buildingId,
                 "timeRange", timeRange,

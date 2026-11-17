@@ -89,6 +89,40 @@ public class ClaudeService {
         return analyzeEnergyData(reportData, query);
     }
 
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> callWithTools(String systemPrompt,
+                                              List<Map<String, Object>> messages,
+                                              List<Map<String, Object>> tools) {
+        if (apiKey == null || apiKey.equals("your_claude_api_key_here")) {
+            return Map.of("stop_reason", "end_turn",
+                    "content", List.of(Map.of("type", "text", "text", "")));
+        }
+        try {
+            Map<String, Object> requestBody = new java.util.HashMap<>();
+            requestBody.put("model", model);
+            requestBody.put("max_tokens", maxTokens);
+            requestBody.put("system", systemPrompt);
+            requestBody.put("messages", messages);
+            if (tools != null && !tools.isEmpty()) requestBody.put("tools", tools);
+
+            Map result = webClient.post()
+                    .uri(apiUrl)
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+            return result != null ? result : Map.of("stop_reason", "end_turn",
+                    "content", List.of(Map.of("type", "text", "text", "响应为空")));
+        } catch (Exception e) {
+            return Map.of("stop_reason", "end_turn",
+                    "content", List.of(Map.of("type", "text", "text",
+                            generateFallbackAnalysis("", ""))));
+        }
+    }
+
     private String generateFallbackAnalysis(String query, String contextData) {
         return String.format(
             "**智能分析报告**（本地分析模式）\n\n" +

@@ -19,6 +19,7 @@ import java.util.List;
 public class ReportService {
 
     private final EnergyConsumptionRepository energyRepo;
+    private final CozeService cozeService;
     private final ClaudeService claudeService;
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -101,7 +102,9 @@ public class ReportService {
             Sheet analysisSheet = workbook.createSheet("AI智能分析");
             String contextData = String.format("建筑%s: 总电力%.2fkWh, 总水耗%.2fm³, 总碳排放%.2fkg, 空调%.2fkWh, 共%d条记录",
                     buildingId, sumPower, sumWater, sumCarbon, sumAc, dataList.size());
-            String aiResult = claudeService.generateEnergyReport(buildingId, contextData);
+            String aiResult = cozeService.isConfigured()
+                    ? cozeService.generateEnergyReport(buildingId, contextData)
+                    : claudeService.generateEnergyReport(buildingId, contextData);
 
             Row aiTitleRow = analysisSheet.createRow(0);
             aiTitleRow.createCell(0).setCellValue("AI智能分析结果");

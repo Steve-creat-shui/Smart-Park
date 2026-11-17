@@ -21,6 +21,9 @@ public class EnergyConsumption {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "enterprise_id")
+    private Long enterpriseId;
+
     @Column(name = "building_id", nullable = false, length = 50)
     private String buildingId;
 

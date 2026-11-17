@@ -1,0 +1,3085 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字孪生·智慧园区</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #0a0e1a; overflow: hidden; color: #e0e0e0; }
+        #canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes flicker { 0%, 100% { opacity: 1; } 92% { opacity: 1; } 93% { opacity: 0.3; } 94% { opacity: 1; } 96% { opacity: 0.5; } 97% { opacity: 1; } }
+        
+        .header { position: fixed; top: 0; left: 0; right: 0; height: 70px; background: linear-gradient(180deg, rgba(0,20,40,0.95) 0%, rgba(0,20,40,0.8) 100%); border-bottom: 2px solid #00ffff; box-shadow: 0 0 30px rgba(0,255,255,0.3); z-index: 1000; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; }
+        .header-title { font-size: 32px; font-weight: bold; letter-spacing: 8px; background: linear-gradient(90deg, #00ffff, #0080ff, #00ffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; animation: flicker 4s infinite; }
+        .header-time { font-size: 18px; color: #00ffff; font-family: 'Courier New', monospace; }
+        
+        .left-nav { position: fixed; left: 0; top: 90px; bottom: 50px; width: 80px; background: linear-gradient(90deg, rgba(0,20,40,0.9) 0%, rgba(0,20,40,0.7) 100%); border-right: 2px solid rgba(0,255,255,0.5); z-index: 500; padding: 30px 15px; display: flex; flex-direction: column; gap: 30px; }
+        .nav-item { width: 50px; height: 50px; background: rgba(0,255,255,0.1); border: 1px solid rgba(0,255,255,0.5); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s ease; position: relative; }
+        .nav-item:hover, .nav-item.active { background: rgba(0,255,255,0.3); box-shadow: 0 0 20px rgba(0,255,255,0.5); border-color: #00ffff; }
+        .nav-item svg { width: 24px; height: 24px; fill: #00ffff; filter: drop-shadow(0 0 5px #00ffff); }
+        .nav-tooltip { position: absolute; left: 60px; background: rgba(0,30,60,0.95); border: 1px solid #00ffff; border-radius: 4px; padding: 6px 12px; font-size: 12px; color: #00ffff; white-space: nowrap; opacity: 0; visibility: hidden; transition: all 0.3s ease; z-index: 1001; }
+        .nav-item:hover .nav-tooltip { opacity: 1; visibility: visible; }
+        
+        .panels-container { position: fixed; top: 90px; left: 100px; right: 20px; bottom: 70px; pointer-events: none; z-index: 100; }
+        .page-content { display: none; width: 100%; height: 100%; position: relative; }
+        .page-content.active { display: block; }
+        .left-panels { position: absolute; left: 0; top: 0; width: 320px; height: 100%; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; padding-right: 8px; transition: transform 0.4s ease, opacity 0.3s ease; }
+        .right-panels { position: absolute; right: 0; top: 0; width: 320px; height: 100%; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; overflow-x: hidden; pointer-events: auto; padding-right: 8px; transition: transform 0.4s ease, opacity 0.3s ease; }
+        .left-panels.hidden { transform: translateX(-120%); opacity: 0; pointer-events: none; }
+        .right-panels.hidden { transform: translateX(120%); opacity: 0; pointer-events: none; }
+        .left-panels::-webkit-scrollbar, .right-panels::-webkit-scrollbar { width: 6px; }
+        .left-panels::-webkit-scrollbar-track, .right-panels::-webkit-scrollbar-track { background: rgba(0,20,40,0.3); border-radius: 3px; }
+        .left-panels::-webkit-scrollbar-thumb, .right-panels::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.5); border-radius: 3px; border: 1px solid rgba(0,255,255,0.3); }
+        
+        .panel { pointer-events: auto; background: linear-gradient(135deg, rgba(0,30,60,0.85) 0%, rgba(0,15,30,0.9) 100%); border: 1px solid rgba(0,255,255,0.4); border-radius: 8px; position: relative; overflow: hidden; box-shadow: 0 0 20px rgba(0,255,255,0.2); display: flex; flex-direction: column; max-height: calc(50vh - 60px); }
+        .panel::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #00ffff, transparent); z-index: 1; }
+        .panel-title { font-size: 16px; font-weight: bold; color: #00ffff; padding: 12px 15px; border-bottom: 1px solid rgba(0,255,255,0.3); display: flex; align-items: center; gap: 10px; flex-shrink: 0; z-index: 2; position: relative; }
+        .panel-title-icon { width: 4px; height: 16px; background: linear-gradient(180deg, #00ffff, #0080ff); border-radius: 2px; }
+        .panel-content { padding: 15px; overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; position: relative; z-index: 1; }
+        .panel-content::-webkit-scrollbar { width: 6px; }
+        .panel-content::-webkit-scrollbar-track { background: rgba(0,20,40,0.3); border-radius: 2px; }
+        .panel-content::-webkit-scrollbar-thumb { background: rgba(0,255,255,0.6); border-radius: 2px; border: 1px solid rgba(0,255,255,0.3); }
+        .panel-content::-webkit-scrollbar-thumb:hover { background: rgba(0,255,255,0.8); }
+        
+        .data-list { display: flex; flex-direction: column; gap: 8px; }
+        .data-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: rgba(0,255,255,0.05); border-left: 3px solid #00ffff; border-radius: 0 4px 4px 0; }
+        .data-item-label { color: #aaa; font-size: 13px; }
+        .data-item-value { color: #00ffff; font-weight: bold; font-family: 'Courier New', monospace; }
+        .data-item-value.warning { color: #ff4444; animation: pulse 1s infinite; }
+        
+        .progress-bar { width: 100%; height: 8px; background: rgba(0,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 5px; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00ffff, #0080ff); border-radius: 4px; box-shadow: 0 0 10px rgba(0,255,255,0.5); transition: width 0.5s ease; }
+        
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 50px; background: linear-gradient(0deg, rgba(0,20,40,0.95) 0%, rgba(0,20,40,0.8) 100%); border-top: 2px solid rgba(0,255,255,0.5); z-index: 1000; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; }
+        .bottom-stats { display: flex; gap: 40px; }
+        .stat-item { display: flex; align-items: center; gap: 10px; }
+        .stat-indicator { width: 10px; height: 10px; background: #00ff00; border-radius: 50%; box-shadow: 0 0 10px #00ff00; animation: pulse 1.5s infinite; }
+        .stat-indicator.warning { background: #ff4444; box-shadow: 0 0 10px #ff4444; }
+        .stat-label { color: #888; font-size: 13px; }
+        .stat-value { color: #00ffff; font-weight: bold; font-family: 'Courier New', monospace; font-size: 16px; }
+        
+        .chart-container { width: 100%; height: 100%; }
+        
+        .video-window { width: 100%; aspect-ratio: 16/9; background: linear-gradient(135deg, #001a33 0%, #000d1a 100%); border: 1px solid rgba(0,255,255,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .video-window::before { content: 'VIDEO FEED'; color: rgba(0,255,255,0.3); font-size: 12px; letter-spacing: 4px; }
+        .video-window-status { position: absolute; top: 8px; left: 8px; font-size: 10px; color: #00ff00; display: flex; align-items: center; gap: 5px; }
+        .video-window-dot { width: 6px; height: 6px; background: #00ff00; border-radius: 50%; animation: pulse 1s infinite; }
+        
+        .temp-indicator { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); border-radius: 4px; margin: 5px 0; }
+        .temp-indicator.normal { background: rgba(0,255,136,0.1); border-color: rgba(0,255,136,0.3); }
+        .temp-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff4444; box-shadow: 0 0 8px #ff4444; animation: pulse 1s infinite; }
+        .temp-indicator.normal .temp-dot { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        
+        .alarm-zone { background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.5); border-radius: 6px; padding: 10px; margin-top: 10px; }
+        .alarm-title { color: #ff4444; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .alarm-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: rgba(255,68,68,0.1); border-radius: 4px; margin: 4px 0; font-size: 11px; }
+        .alarm-time { color: #888; }
+        .alarm-msg { color: #ff8888; }
+        
+        .monitor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .monitor-item { aspect-ratio: 16/10; background: linear-gradient(135deg, #001a33 0%, #000d1a 100%); border: 1px solid rgba(0,255,255,0.3); border-radius: 4px; display: flex; align-items: center; justify-content: center; position: relative; font-size: 10px; color: rgba(0,255,255,0.5); }
+        .monitor-status { position: absolute; top: 4px; left: 4px; width: 6px; height: 6px; border-radius: 50%; background: #00ff00; box-shadow: 0 0 6px #00ff00; }
+        
+        .gauge-container { display: flex; justify-content: space-around; align-items: center; padding: 10px 0; }
+        .gauge-item { text-align: center; }
+        .gauge-value { font-size: 24px; font-weight: bold; color: #00ffff; }
+        .gauge-label { font-size: 12px; color: #888; margin-top: 5px; }
+        
+        .tooltip { position: fixed; background: rgba(0,20,40,0.95); border: 1px solid #00ffff; border-radius: 8px; padding: 12px; font-size: 13px; color: #00ffff; pointer-events: none; z-index: 2000; display: none; box-shadow: 0 0 20px rgba(0,255,255,0.3); }
+        .tooltip-title { font-weight: bold; margin-bottom: 5px; color: #fff; }
+        
+        /* ========== 楼层选择器面板 ========== */
+        .floor-selector-panel {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 580px;
+            max-height: 70vh;
+            background: linear-gradient(135deg, rgba(0,25,55,0.97) 0%, rgba(0,12,30,0.97) 100%);
+            border: 2px solid #00ccff;
+            border-radius: 20px;
+            z-index: 5000;
+            box-shadow: 0 15px 50px rgba(0,200,255,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .floor-panel-header {
+            background: linear-gradient(90deg, rgba(0,150,255,0.2) 0%, transparent 100%);
+            padding: 18px 24px;
+            border-bottom: 1px solid rgba(0,200,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .floor-panel-header h3 {
+            margin: 0;
+            color: #00ffff;
+            font-size: 22px;
+            text-shadow: 0 0 10px rgba(0,255,255,0.5);
+        }
+        .floor-subtitle { color: #88bbdd; font-size: 13px; margin-left: 15px; }
+        .close-floor-btn {
+            background: rgba(255,60,60,0.2);
+            border: 1px solid rgba(255,80,80,0.5);
+            color: #ff6666;
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        .close-floor-btn:hover { background: rgba(255,60,60,0.4); transform: scale(1.1); }
+        
+        /* 楼层网格 */
+        .floor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 14px;
+            padding: 24px;
+            overflow-y: auto;
+            max-height: calc(70vh - 80px);
+        }
+        .floor-card {
+            background: linear-gradient(145deg, rgba(0,80,140,0.3) 0%, rgba(0,40,80,0.4) 100%);
+            border: 2px solid rgba(0,180,255,0.3);
+            border-radius: 14px;
+            padding: 16px 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+        .floor-card:hover {
+            border-color: #00ffff;
+            background: linear-gradient(145deg, rgba(0,120,200,0.4) 0%, rgba(0,60,120,0.5) 100%);
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,200,255,0.4);
+        }
+        .floor-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: #00ffff;
+            text-shadow: 0 0 15px rgba(0,255,255,0.6);
+        }
+        .floor-name { color: #aaddff; font-size: 14px; margin-top: 6px; }
+        .floor-room-count { color: #6699bb; font-size: 11px; margin-top: 4px; }
+        
+        /* ========== 房间网格面板 ========== */
+        .room-grid-panel {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            max-height: 75vh;
+            background: linear-gradient(135deg, rgba(8,20,45,0.97) 0%, rgba(3,10,28,0.97) 100%);
+            border: 2px solid #00aaff;
+            border-radius: 20px;
+            z-index: 5500;
+            box-shadow: 0 15px 50px rgba(0,170,255,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .room-grid-header {
+            background: linear-gradient(90deg, rgba(0,130,220,0.25) 0%, transparent 100%);
+            padding: 16px 24px;
+            border-bottom: 1px solid rgba(0,170,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .back-to-floors {
+            background: rgba(0,150,255,0.2);
+            border: 1px solid rgba(0,180,255,0.5);
+            color: #00ccff;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+            white-space: nowrap;
+        }
+        .back-to-floors:hover { background: rgba(0,150,255,0.35); }
+        .room-grid-header h3 { margin: 0; color: #00e0ff; font-size: 19px; flex: 1; }
+        .room-count-info { color: #77aaCC; font-size: 12px; white-space: nowrap; }
+        .close-room-grid {
+            background: rgba(255,60,60,0.2);
+            border: 1px solid rgba(255,80,80,0.5);
+            color: #ff6666;
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .close-room-grid:hover { background: rgba(255,60,60,0.4); }
+        
+        .room-grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 14px;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(75vh - 70px);
+        }
+        .room-card {
+            background: linear-gradient(145deg, rgba(0,60,110,0.35) 0%, rgba(0,30,65,0.45) 100%);
+            border: 2px solid rgba(0,160,230,0.3);
+            border-radius: 14px;
+            padding: 16px 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        .room-card:hover {
+            border-color: #00ddff;
+            background: linear-gradient(145deg, rgba(0,100,170,0.45) 0%, rgba(0,50,100,0.55) 100%);
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 6px 20px rgba(0,200,255,0.35);
+        }
+        .room-icon { font-size: 32px; margin-bottom: 8px; }
+        .room-name { color: #ffffff; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
+        .room-type { color: #99ccee; font-size: 11px; margin-bottom: 6px; }
+        .room-area { color: #6699bb; font-size: 11px; margin-bottom: 8px; }
+        .room-device-status { display: flex; justify-content: center; gap: 6px; }
+        .device-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .device-dot.normal { background: #00ff44; box-shadow: 0 0 8px rgba(0,255,68,0.7); }
+        .device-dot.warning { background: #ffcc00; box-shadow: 0 0 8px rgba(255,204,0,0.7); }
+        .device-dot.error { background: #ff3344; box-shadow: 0 0 8px rgba(255,51,68,0.7); animation: pulse-error 1.5s infinite; }
+        @keyframes pulse-error { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        
+        /* ========== 房间窗口（小窗口） ========== */
+        .room-window {
+            min-height: 380px;
+            max-height: 600px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+        .room-window.minimized { height: 48px; min-height: 48px; overflow: hidden; }
+        .room-window.minimized .room-window-body { display: none; }
+        
+        .room-window-header {
+            background: linear-gradient(90deg, rgba(0,140,240,0.3) 0%, rgba(0,80,160,0.2) 100%);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(0,180,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: move;
+            user-select: none;
+        }
+        .room-title-row { display: flex; align-items: center; gap: 10px; flex: 1; }
+        .room-window-icon { font-size: 22px; }
+        .room-window-title { color: #ffffff; font-weight: bold; font-size: 16px; }
+        .room-floor-badge {
+            background: rgba(0,180,255,0.25);
+            border: 1px solid rgba(0,200,255,0.5);
+            color: #00ddff;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+        .room-window-controls { display: flex; gap: 6px; }
+        .rw-minimize, .rw-close {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #aaa;
+            width: 26px; height: 26px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .rw-minimize:hover { background: rgba(255,200,0,0.2); border-color: #ffcc00; color: #ffcc00; }
+        .rw-close:hover { background: rgba(255,60,60,0.3); border-color: #ff4444; color: #ff4444; }
+        
+        .room-window-body { padding: 16px; overflow-y: auto; flex: 1; }
+        .room-info-bar {
+            display: flex; justify-content: space-around;
+            background: rgba(0,40,80,0.4);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 14px;
+            font-size: 12px;
+            color: #aaccee;
+        }
+        
+        /* 设备区域 */
+        .section-title { color: #00ddff; font-size: 14px; margin: 12px 0 10px 0; padding-bottom: 6px; border-bottom: 1px solid rgba(0,180,255,0.2); }
+        .devices-section { margin-bottom: 16px; }
+        
+        .device-card {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(0,30,60,0.5);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+        .device-card.device-normal { border-color: rgba(0,255,68,0.4); background: rgba(0,50,30,0.4); }
+        .device-card.device-warning { border-color: rgba(255,204,0,0.4); background: rgba(50,45,0,0.4); }
+        .device-card.device-error { border-color: rgba(255,51,68,0.5); background: rgba(50,10,15,0.4); }
+        
+        .device-icon { font-size: 28px; }
+        .device-info { flex: 1; }
+        .device-name { color: #ffffff; font-weight: bold; font-size: 14px; }
+        .device-status-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+        .status-normal { background: rgba(0,255,68,0.2); color: #00ff44; border: 1px solid rgba(0,255,68,0.4); }
+        .status-warning { background: rgba(255,204,0,0.2); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
+        .status-error { background: rgba(255,51,68,0.2); color: #ff3344; border: 1px solid rgba(255,51,68,0.4); animation: pulse-error 1.5s infinite; }
+        
+        .device-details { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: #99bbdd; min-width: 85px; }
+        .device-toggle { display: flex; align-items: center; gap: 8px; }
+        .toggle-label { font-size: 11px; color: #88aacc; min-width: 32px; }
+        
+        /* 开关样式 */
+        .switch { position: relative; display: inline-block; width: 42px; height: 22px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(60,60,60,0.5);
+            transition: 0.3s; border-radius: 22px;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 16px; width: 16px;
+            left: 2px; bottom: 2px;
+            background: #ccc;
+            transition: 0.3s; border-radius: 50%;
+        }
+        input:checked + .slider { background: rgba(0,180,255,0.4); border-color: rgba(0,200,255,0.6); }
+        input:checked + .slider:before { transform: translateX(20px); background: #00ddff; box-shadow: 0 0 8px rgba(0,220,255,0.6); }
+        
+        /* 控制面板 */
+        .control-panel { margin-top: 12px; }
+        .control-grid { display: flex; flex-direction: column; gap: 12px; }
+        .control-item {
+            background: rgba(0,25,55,0.5);
+            border: 1px solid rgba(0,150,255,0.2);
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .control-label { color: #00ccff; font-size: 13px; font-weight: bold; margin-bottom: 8px; }
+        .control-buttons { display: flex; gap: 8px; margin-bottom: 8px; }
+        .ctrl-btn {
+            flex: 1; padding: 7px 10px;
+            border: 1px solid; border-radius: 8px;
+            cursor: pointer; font-size: 12px;
+            transition: all 0.2s; color: #fff;
+        }
+        .ctrl-on { background: rgba(0,180,80,0.2); border-color: rgba(0,220,100,0.5); }
+        .ctrl-on:hover { background: rgba(0,180,80,0.4); }
+        .ctrl-off { background: rgba(180,60,60,0.2); border-color: rgba(220,80,80,0.5); }
+        .ctrl-off:hover { background: rgba(180,60,60,0.4); }
+        .ctrl-repair { background: rgba(200,160,0,0.2); border-color: rgba(220,180,0,0.5); }
+        .ctrl-repair:hover { background: rgba(200,160,0,0.4); }
+        
+        .status-indicators { display: flex; gap: 10px; justify-content: center; }
+        .si-item {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            opacity: 0.4;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .si-item:hover { opacity: 0.7; }
+        .si-item.active { opacity: 1; transform: scale(1.05); }
+        .si-normal { color: #00ff44; background: rgba(0,255,68,0.1); }
+        .si-normal.active { background: rgba(0,255,68,0.25); border-color: rgba(0,255,68,0.5); }
+        .si-warning { color: #ffcc00; background: rgba(255,204,0,0.1); }
+        .si-warning.active { background: rgba(255,204,0,0.25); border-color: rgba(255,204,0,0.5); }
+        .si-error { color: #ff3344; background: rgba(255,51,68,0.1); }
+        .si-error.active { background: rgba(255,51,68,0.25); border-color: rgba(255,51,68,0.5); }
+        
+        .drag-handle { height: 6px; background: rgba(0,150,255,0.2); cursor: move; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    
+    <div class="header">
+        <div class="header-title">数字孪生·智慧园区</div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <button id="togglePanelsBtn" onclick="toggleAllPanels()" 
+                style="background: linear-gradient(90deg, rgba(0,255,255,0.2), rgba(0,128,255,0.2)); 
+                border: 1px solid #00ffff; color: #00ffff; padding: 6px 15px; border-radius: 6px; 
+                cursor: pointer; font-size: 13px; font-weight: bold; transition: all 0.3s;">
+                👁️ 隐藏面板
+            </button>
+            <div class="header-time" id="currentTime">2026-04-01 12:00:00</div>
+        </div>
+    </div>
+    
+    <div class="left-nav">
+            <div class="nav-item active" data-page="overview" title="首页/总览">
+                <svg viewBox="0 0 24 24"><path d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+                <span class="nav-tooltip">首页/总览</span>
+            </div>
+            <div class="nav-item" data-page="monitor" title="监控巡防">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                <span class="nav-tooltip">监控巡防</span>
+            </div>
+            <div class="nav-item" data-page="energy" title="能耗分析">
+                <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <span class="nav-tooltip">能耗分析</span>
+            </div>
+            <div class="nav-item" data-page="device" title="设备状态">
+                <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                <span class="nav-tooltip">设备状态</span>
+            </div>
+            <div class="nav-item" data-page="convert" title="2D转3D">
+                <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zm0 3.84L18.16 7 12 9.16 5.84 7 12 5.84zM2 17l10 5 10-5M18.16 17l-6 3-6-3z"/></svg>
+                <span class="nav-tooltip">2D转3D</span>
+            </div>
+        </div>
+    
+    <div class="panels-container">
+        <!-- 首页总览 -->
+        <div class="page-content active" id="page-overview">
+            <div class="left-panels">
+                <div class="panel" style="height: 240px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>环境监测总览</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="overviewEnvChart" class="chart-container" style="height: 180px;"></div></div>
+                </div>
+                <div class="panel" style="height: 160px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>实时数据仪表盘</div>
+                    <div class="panel-content">
+                        <div class="gauge-container">
+                            <div class="gauge-item"><div class="gauge-value" id="gaugeTemp">24.5°</div><div class="gauge-label">温度</div></div>
+                            <div class="gauge-item"><div class="gauge-value" id="gaugeHumidity">65%</div><div class="gauge-label">湿度</div></div>
+                            <div class="gauge-item"><div class="gauge-value" id="gaugePM">35</div><div class="gauge-label">PM2.5</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="right-panels">
+                <div class="panel" style="height: 240px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>能耗趋势总览</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="overviewEnergyChart" class="chart-container" style="height: 180px;"></div></div>
+                </div>
+                <div class="panel" style="height: 160px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>综合统计</div>
+                    <div class="panel-content">
+                        <div class="data-list">
+                            <div class="data-item"><span class="data-item-label">总能耗</span><span class="data-item-value">50,842 kWh</span></div>
+                            <div class="data-item"><span class="data-item-label">在线设备</span><span class="data-item-value">2,835</span></div>
+                            <div class="data-item"><span class="data-item-label">园区人数</span><span class="data-item-value">1,247</span></div>
+                            <div class="data-item"><span class="data-item-label">告警数量</span><span class="data-item-value warning">1</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 监控巡防 -->
+        <div class="page-content" id="page-monitor">
+            <div class="left-panels">
+                <div class="panel" style="height: 280px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>红外感温监测</div>
+                    <div class="panel-content">
+                        <div class="data-list">
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">宿舍楼A</span><span class="data-item-value">24.5°C</span></div>
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">宿舍楼B</span><span class="data-item-value">24.8°C</span></div>
+                            <div class="temp-indicator"><div class="temp-dot"></div><span class="data-item-label">实验楼</span><span class="data-item-value warning">28.6°C</span></div>
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">行政楼</span><span class="data-item-value">23.5°C</span></div>
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">图书馆</span><span class="data-item-value">23.8°C</span></div>
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">室内体育馆</span><span class="data-item-value">22.5°C</span></div>
+                            <div class="temp-indicator normal"><div class="temp-dot"></div><span class="data-item-label">餐厅</span><span class="data-item-value">26.5°C</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel" style="height: 180px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>温度变化趋势</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="monitorTempChart" class="chart-container" style="height: 120px;"></div></div>
+                </div>
+            </div>
+            <div class="right-panels">
+                <div class="panel" style="height: 240px; flex-shrink: 0;">
+                    <div class="panel-title">
+                        <div class="panel-title-icon"></div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <span>实时监控画面</span>
+                            <button id="importMonitorBtn" onclick="showImportMonitorDialog()" style="padding: 4px 10px; background: linear-gradient(90deg, rgba(0,255,136,0.3), rgba(0,200,100,0.3)); border: 1px solid #00ff88; color: #00ff88; border-radius: 4px; cursor: pointer; font-size: 11px;">📹 导入监控设备</button>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div id="monitorVideoContainer" class="video-window" style="position: relative;">
+                            <div class="video-window-status"><span class="video-window-dot"></span>LIVE</div>
+                            <video id="monitorVideoPlayer" style="width: 100%; height: 100%; object-fit: cover; display: none;" controls autoplay muted></video>
+                            <div id="monitorPlaceholder" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: rgba(0,255,255,0.5);">
+                                <div style="font-size: 24px; margin-bottom: 10px;">📹</div>
+                                <div>点击上方按钮导入监控设备</div>
+                                <div style="font-size: 11px; margin-top: 5px;">支持 RTMP/RTSP/HLS/FLV 流媒体地址</div>
+                            </div>
+                        </div>
+                        <div id="monitorInfo" style="margin-top: 10px; padding: 10px; background: rgba(0,255,136,0.08); border: 1px solid rgba(0,255,136,0.3); border-radius: 6px; font-size: 11px; display: none; line-height: 1.6;">
+                            <div style="margin-bottom: 6px;">
+                                <strong style="color: #00ff88;">📹 当前监控：</strong>
+                                <span id="currentMonitorName" style="color: #fff; font-weight: bold;">-</span>
+                            </div>
+                            <div>
+                                <strong style="color: #aaa;">🔗 地址：</strong><br>
+                                <span id="currentMonitorUrl" style="color: #00ffff; word-break: break-all; font-size: 10px; display: block; margin-top: 4px; background: rgba(0,20,40,0.5); padding: 4px 6px; border-radius: 3px; max-height: 40px; overflow-y: auto;">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel" style="height: 200px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>监控点位状态</div>
+                    <div class="panel-content">
+                        <div class="monitor-grid">
+                            <div class="monitor-item"><div class="monitor-status"></div>宿舍楼A-01</div>
+                            <div class="monitor-item"><div class="monitor-status"></div>宿舍楼B-02</div>
+                            <div class="monitor-item"><div class="monitor-status"></div>行政楼-03</div>
+                            <div class="monitor-item"><div class="monitor-status"></div>图书馆-04</div>
+                            <div class="monitor-item"><div class="monitor-status"></div>实验楼-05</div>
+                            <div class="monitor-item"><div class="monitor-status"></div>体育馆-06</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 能耗分析 -->
+        <div class="page-content" id="page-energy">
+            <div class="left-panels">
+                <div class="panel" style="height: 220px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>能耗分布</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="energyPieChart" class="chart-container" style="height: 160px;"></div></div>
+                </div>
+                <div class="panel" style="height: 200px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>能耗趋势</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="energyLineChart" class="chart-container" style="height: 140px;"></div></div>
+                </div>
+            </div>
+            <div class="right-panels">
+                <div class="panel" style="height: 320px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>分楼宇能耗统计</div>
+                    <div class="panel-content">
+                        <div class="data-list">
+                            <div class="data-item">
+                                <span class="data-item-label">实验楼</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">12,456 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 95%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">宿舍楼A</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">8,456 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 65%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">宿舍楼B</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">8,320 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 64%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">图书馆</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">6,890 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 53%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">餐厅</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">5,650 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 43%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">行政楼</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">5,180 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 40%;"></div></div>
+                                </div>
+                            </div>
+                            <div class="data-item">
+                                <span class="data-item-label">室内体育馆</span>
+                                <div style="text-align: right; flex: 1; margin-left: 20px;">
+                                    <span class="data-item-value">3,890 kWh</span>
+                                    <div class="progress-bar"><div class="progress-fill" style="width: 30%;"></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel" style="height: 160px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>实时能耗监测</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="energyRealtimeChart" class="chart-container" style="height: 100px;"></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 设备状态 -->
+        <div class="page-content" id="page-device">
+            <div class="left-panels">
+                <div class="panel" style="height: 220px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>设备状态分布</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="deviceStatusChart" class="chart-container" style="height: 160px;"></div></div>
+                </div>
+                <div class="panel" style="height: 240px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>分楼宇设备统计</div>
+                    <div class="panel-content">
+                        <div class="data-list">
+                            <div class="data-item"><span class="data-item-label">实验楼</span><span class="data-item-value">680</span></div>
+                            <div class="data-item"><span class="data-item-label">图书馆</span><span class="data-item-value">520</span></div>
+                            <div class="data-item"><span class="data-item-label">宿舍楼A</span><span class="data-item-value">420</span></div>
+                            <div class="data-item"><span class="data-item-label">宿舍楼B</span><span class="data-item-value">415</span></div>
+                            <div class="data-item"><span class="data-item-label">行政楼</span><span class="data-item-value">380</span></div>
+                            <div class="data-item"><span class="data-item-label">餐厅</span><span class="data-item-value">240</span></div>
+                            <div class="data-item"><span class="data-item-label">室内体育馆</span><span class="data-item-value">180</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="right-panels">
+                <div class="panel" style="height: 280px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>异常数据报警</div>
+                    <div class="panel-content">
+                        <div class="alarm-zone">
+                            <div class="alarm-title"><span>⚠</span>实时告警</div>
+                            <div class="alarm-item"><span class="alarm-time">12:34:56</span><span class="alarm-msg">实验楼温度异常</span></div>
+                            <div class="alarm-item"><span class="alarm-time">12:28:32</span><span class="alarm-msg">实验楼能耗超标</span></div>
+                            <div class="alarm-item"><span class="alarm-time">12:15:18</span><span class="alarm-msg">餐厅门禁告警</span></div>
+                            <div class="alarm-item"><span class="alarm-time">11:52:44</span><span class="alarm-msg">图书馆网络中断</span></div>
+                        </div>
+                        <div class="data-list" style="margin-top: 10px;">
+                            <div class="data-item"><span class="data-item-label">今日告警</span><span class="data-item-value warning">4</span></div>
+                            <div class="data-item"><span class="data-item-label">未处理</span><span class="data-item-value warning">1</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel" style="height: 160px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>设备健康度</div>
+                    <div class="panel-content" style="padding: 10px;"><div id="deviceHealthChart" class="chart-container" style="height: 100px;"></div></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 2D转3D -->
+        <div class="page-content" id="page-convert">
+            <div class="left-panels">
+                <div class="panel" style="height: auto; min-height: 400px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>平面图智能识别</div>
+                    <div class="panel-content">
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                                <button id="uploadMapBtn" style="flex: 1; padding: 6px; background: rgba(0,255,255,0.1); border: 1px solid #00ffff; color: #00ffff; border-radius: 4px; cursor: pointer; font-size: 11px;">📁 上传平面图</button>
+                                <button id="autoDetectBtn" style="flex: 1; padding: 6px; background: linear-gradient(90deg, rgba(255,136,0,0.3), rgba(255,68,68,0.3)); border: 1px solid #ff8800; color: #ff8800; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold;">🤖 智能识别建筑</button>
+                                <button id="addBuildingBtn" class="convert-btn" style="flex: 1; padding: 6px; background: rgba(0,255,136,0.2); border: 1px solid #00ff88; color: #00ff88; border-radius: 4px; cursor: pointer; font-size: 11px;">➕ 手动添加</button>
+                                <button id="clearAllBtn" class="convert-btn" style="flex: 1; padding: 6px; background: rgba(255,68,68,0.1); border: 1px solid #ff4444; color: #ff4444; border-radius: 4px; cursor: pointer; font-size: 11px;">清空</button>
+                            </div>
+                            <div id="mapEditorContainer" style="border: 2px dashed rgba(0,255,255,0.5); border-radius: 8px; background: rgba(0,15,30,0.9); position: relative; overflow: hidden;" ondrop="handleMapDrop(event)" ondragover="handleMapDragOver(event)">
+                                <canvas id="mapCanvas" width="280" height="280" style="display: block; cursor: crosshair;"></canvas>
+                                <div id="mapPlaceholder" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: rgba(0,255,255,0.7); pointer-events: none;">
+                                    <div>📐 拖拽平面图到此处</div>
+                                    <div style="font-size: 11px; margin-top: 5px; color: rgba(0,255,255,0.5);">支持自动识别或手动标注建筑位置</div>
+                                </div>
+                            </div>
+                            <div style="font-size: 10px; color: #888; padding: 6px; background: rgba(255,136,0,0.08); border-left: 3px solid #ff8800; border-radius: 4px;">
+                                <strong>🎯 智能识别模式：</strong>上传带建筑标记的平面图后点击"智能识别"，系统会自动检测图中的矩形/方形区域作为建筑
+                            </div>
+                            <div style="font-size: 10px; color: #888; padding: 6px; background: rgba(0,255,255,0.05); border-radius: 4px;">
+                                💡 <strong>手动模式：</strong>点击"手动添加"后在图中点击放置建筑
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel" style="height: auto; min-height: 280px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>已识别建筑 (<span id="buildingCount">0</span>)</div>
+                    <div class="panel-content">
+                        <div id="buildingList" style="max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+                            <div style="text-align: center; color: #666; padding: 20px; font-size: 12px;">暂无建筑，请上传平面图并识别</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="right-panels">
+                <div class="panel" style="height: 380px; flex-shrink: 0;">
+                    <div class="panel-title">
+                        <div class="panel-title-icon"></div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <span>3D园区预览</span>
+                            <div style="display: flex; gap: 5px;">
+                                <button id="view2D" class="view-btn" style="padding: 4px 8px; background: rgba(0,255,255,0.3); border: 1px solid #00ffff; color: #00ffff; border-radius: 4px; cursor: pointer; font-size: 11px;">2D</button>
+                                <button id="view3D" class="view-btn" style="padding: 4px 8px; background: rgba(0,255,255,0.1); border: 1px solid #00ffff; color: #00ffff; border-radius: 4px; cursor: pointer; font-size: 11px;">3D</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-content">
+                        <div id="previewContainer" style="width: 100%; height: 330px; border: 1px solid rgba(0,255,255,0.5); background: rgba(0,15,30,0.8); position: relative;">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(0,255,255,0.5); font-size: 13px; text-align: center;">
+                                添加建筑后点击"生成3D园区"
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="panel" style="height: auto; min-height: 150px; flex-shrink: 0;">
+                    <div class="panel-title"><div class="panel-title-icon"></div>操作面板</div>
+                    <div class="panel-content">
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                <div>
+                                    <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">默认高度(m)</label>
+                                    <input type="number" id="defaultHeight" value="20" min="5" max="80" style="width: 100%; background: rgba(0,30,60,0.8); border: 1px solid rgba(0,255,255,0.3); color: #00ffff; padding: 5px; border-radius: 4px; font-size: 12px;">
+                                </div>
+                                <div>
+                                    <label style="color: #aaa; font-size: 11px; display: block; margin-bottom: 3px;">默认颜色</label>
+                                    <input type="color" id="defaultColor" value="#4a90e2" style="width: 100%; height: 28px; background: transparent; border: 1px solid rgba(0,255,255,0.3); border-radius: 4px;">
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                                <button id="generateAllBtn" style="padding: 10px; background: linear-gradient(90deg, #00ffff, #0080ff); border: none; color: #0a0e1a; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 12px;">🏗️ 生成3D园区</button>
+                                <button id="replaceAndApplyBtn" style="padding: 10px; background: linear-gradient(90deg, #ff8800, #ff4444); border: none; color: #fff; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 12px;">🔄 覆盖原模型+更新数据</button>
+                            </div>
+                            <div style="font-size: 10px; color: #888; padding: 6px; background: rgba(255,136,0,0.08); border-left: 3px solid #ff8800; border-radius: 4px;">
+                                ⚠️ "覆盖原模型"将删除原有建筑，用新识别的建筑替换，并自动生成新的统计数据
+                            </div>
+                            <button id="resetPreviewBtn" style="padding: 8px; background: rgba(0,255,255,0.1); border: 1px solid #00ffff; color: #00ffff; border-radius: 4px; cursor: pointer; font-size: 12px;">重置预览</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bottom-bar">
+        <div class="bottom-stats">
+            <div class="stat-item"><div class="stat-indicator"></div><span class="stat-label">系统状态</span><span class="stat-value">运行中</span></div>
+            <div class="stat-item"><div class="stat-indicator"></div><span class="stat-label">在线设备</span><span class="stat-value" id="onlineDevices">2,847</span></div>
+            <div class="stat-item"><div class="stat-indicator warning"></div><span class="stat-label">告警数量</span><span class="stat-value" style="color: #ff4444;" id="alertCount">3</span></div>
+            <div class="stat-item"><div class="stat-indicator"></div><span class="stat-label">今日能耗</span><span class="stat-value" id="energyToday">32,456 kWh</span></div>
+        </div>
+        <div class="bottom-stats">
+            <div class="stat-item"><span class="stat-label">园区人数</span><span class="stat-value" id="peopleCount">1,247</span></div>
+            <div class="stat-item"><span class="stat-label">车辆进出</span><span class="stat-value">348 / 345</span></div>
+            <div class="stat-item"><span class="stat-label">运行时长</span><span class="stat-value" id="runTime">185天</span></div>
+        </div>
+    </div>
+    
+    <div class="tooltip" id="tooltip"></div>
+    
+    <!-- 监控导入对话框 -->
+    <div id="importMonitorDialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 5000; justify-content: center; align-items: center;">
+        <div style="width: 450px; background: linear-gradient(135deg, rgba(0,30,60,0.98) 0%, rgba(0,15,30,0.98) 100%); border: 2px solid #00ff88; border-radius: 12px; padding: 25px; box-shadow: 0 0 40px rgba(0,255,136,0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: #00ff88; margin: 0; font-size: 20px;">📹 导入监控设备</h2>
+                <button onclick="closeImportMonitorDialog()" style="background: none; border: 1px solid #ff4444; color: #ff4444; padding: 5px 12px; border-radius: 4px; cursor: pointer;">关闭</button>
+            </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 5px;">设备名称 *</label>
+                    <input type="text" id="monitorNameInput" placeholder="例如：宿舍楼A-入口摄像头" 
+                        style="width: 100%; background: rgba(0,30,60,0.8); border: 1px solid rgba(0,255,136,0.5); color: #00ff88; padding: 10px; border-radius: 6px; font-size: 14px;">
+                </div>
+                
+                <div>
+                    <label style="color: #aaa; font-size: 13px; display: block; margin-bottom: 5px;">流媒体地址 * (RTMP/RTSP/HLS/FLV)</label>
+                    <input type="text" id="monitorUrlInput" placeholder="rtmp://your-server/live/stream1 或 http://example.com/live.m3u8" 
+                        style="width: 100%; background: rgba(0,30,60,0.8); border: 1px solid rgba(0,255,136,0.5); color: #00ff88; padding: 10px; border-radius: 6px; font-size: 13px;">
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">位置</label>
+                        <select id="monitorLocationSelect" style="width: 100%; background: rgba(0,30,60,0.8); border: 1px solid rgba(0,255,136,0.5); color: #00ff88; padding: 8px; border-radius: 6px; font-size: 13px;">
+                            <option value="宿舍楼A">宿舍楼A</option>
+                            <option value="宿舍楼B">宿舍楼B</option>
+                            <option value="行政楼">行政楼</option>
+                            <option value="图书馆">图书馆</option>
+                            <option value="实验楼">实验楼</option>
+                            <option value="体育馆">体育馆</option>
+                            <option value="餐厅">餐厅</option>
+                            <option value="大门">园区大门</option>
+                            <option value="停车场">停车场</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="color: #aaa; font-size: 12px; display: block; margin-bottom: 5px;">状态</label>
+                        <select id="monitorStatusSelect" style="width: 100%; background: rgba(0,30,60,0.8); border: 1px solid rgba(0,255,136,0.5); color: #00ff88; padding: 8px; border-radius: 6px; font-size: 13px;">
+                            <option value="online">在线</option>
+                            <option value="offline">离线</option>
+                            <option value="maintenance">维护中</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="background: rgba(0,255,136,0.05); padding: 12px; border-left: 3px solid #00ff88; border-radius: 4px; font-size: 11px; color: #888;">
+                    <strong>支持的格式：</strong><br>
+                    • RTMP: rtmp://server/app/stream<br>
+                    • RTSP: rtsp://ip:port/path<br>
+                    • HLS: http://server/live.m3u8<br>
+                    • FLV: http://server/live.flv
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button onclick="connectMonitor()" style="padding: 12px; background: linear-gradient(90deg, #00ff88, #00cc66); border: none; color: #000; font-weight: bold; border-radius: 6px; cursor: pointer; font-size: 14px;">🔗 连接并播放</button>
+                    <button onclick="saveMonitorDevice()" style="padding: 12px; background: rgba(0,255,136,0.2); border: 1px solid #00ff88; color: #00ff88; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;">💾 保存设备</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0e1a);
+        scene.fog = new THREE.Fog(0x0a0e1a, 80, 300);
+        
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(80, 70, 80);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+        controls.minDistance = 40;
+        controls.maxDistance = 200;
+        
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        directionalLight.position.set(100, 150, 100);
+        directionalLight.castShadow = true;
+        directionalLight.shadow.mapSize.width = 4096;
+        directionalLight.shadow.mapSize.height = 4096;
+        scene.add(directionalLight);
+        
+        const neonLight = new THREE.PointLight(0x00ffff, 0.6, 100);
+        neonLight.position.set(0, 50, 0);
+        scene.add(neonLight);
+        
+        const groundGeometry = new THREE.PlaneGeometry(300, 300);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x1a2535, roughness: 0.9, metalness: 0.1 });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        
+        const gridHelper = new THREE.GridHelper(300, 60, 0x003366, 0x001a33);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+        
+        const buildings = [
+            { name: '宿舍楼A', type: 'dormitory', color: 0x4a90e2, pos: [-35, 0, -20], size: [25, 28, 18], floors: 8 },
+            { name: '宿舍楼B', type: 'dormitory', color: 0x4a90e2, pos: [35, 0, -20], size: [25, 28, 18], floors: 8 },
+            { name: '行政楼', type: 'admin', color: 0x50c878, pos: [0, 0, -45], size: [30, 22, 20], floors: 6 },
+            { name: '图书馆', type: 'library', color: 0xffa500, pos: [-45, 0, 20], size: [28, 25, 25], floors: 5 },
+            { name: '实验楼', type: 'lab', color: 0x9932cc, pos: [45, 0, 25], size: [32, 20, 22], floors: 6 },
+            { name: '室内体育馆', type: 'gym', color: 0x7cfc00, pos: [-20, 0, 40], size: [35, 15, 28], floors: 2 },
+            { name: '餐厅', type: 'canteen', color: 0xff4500, pos: [25, 0, 45], size: [22, 12, 18], floors: 2 }
+        ];
+        
+        const buildingMeshes = [];
+        
+        function createRoad(x, z, width, length, rotation = 0) {
+            const roadGeometry = new THREE.PlaneGeometry(width, length);
+            const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x2a3545, roughness: 0.95 });
+            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+            road.rotation.x = -Math.PI / 2;
+            road.rotation.z = rotation;
+            road.position.set(x, 0.02, z);
+            scene.add(road);
+        }
+        
+        createRoad(0, 0, 15, 120);
+        createRoad(0, 0, 120, 15, Math.PI / 2);
+        createRoad(-40, 0, 10, 90, Math.PI / 2);
+        createRoad(40, 0, 10, 90, Math.PI / 2);
+        
+        function createBuildingLabel(text, position, buildingHeight) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const fontSize = 14;
+            const padding = 10;
+            
+            ctx.font = `bold ${fontSize}px Microsoft YaHei`;
+            const textWidth = ctx.measureText(text).width;
+            canvas.width = textWidth + padding * 2;
+            canvas.height = fontSize + padding * 2;
+            
+            // 绘制背景
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制边框
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制白色文字带阴影
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 4;
+            ctx.shadowOffsetX = 2;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${fontSize}px Microsoft YaHei`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(material);
+            sprite.position.copy(position);
+            sprite.position.y = buildingHeight + 8;
+            sprite.scale.set(canvas.width * 0.15, canvas.height * 0.15, 1);
+            
+            return sprite;
+        }
+        
+        buildings.forEach((building, index) => {
+            const group = new THREE.Group();
+            const mainGeometry = new THREE.BoxGeometry(building.size[0], building.size[1], building.size[2]);
+            const mainMaterial = new THREE.MeshStandardMaterial({ 
+                color: building.color, 
+                roughness: 0.2, 
+                metalness: 0.8, 
+                emissive: 0x000000, 
+                emissiveIntensity: 0.1
+            });
+            const mainMesh = new THREE.Mesh(mainGeometry, mainMaterial);
+            mainMesh.position.y = building.size[1] / 2;
+            mainMesh.castShadow = true;
+            mainMesh.receiveShadow = true;
+            mainMesh.userData = { ...building, id: index };
+            group.add(mainMesh);
+            buildingMeshes.push(mainMesh);
+            
+            // 添加建筑名称标签 - 白色字体
+            const labelPosition = new THREE.Vector3(...building.pos);
+            const label = createBuildingLabel(building.name, labelPosition, building.size[1]);
+            scene.add(label);
+            
+            const windowRows = building.floors;
+            const windowCols = Math.floor(building.size[0] / 4);
+            
+            for (let floor = 0; floor < windowRows; floor++) {
+                for (let col = 0; col < windowCols; col++) {
+                    const windowGeometry = new THREE.PlaneGeometry(2.5, 3);
+                    const isLit = Math.random() > 0.3;
+                    const windowMaterial = new THREE.MeshStandardMaterial({ color: isLit ? 0x00ffff : 0x001a33, emissive: isLit ? 0x003366 : 0x000000, emissiveIntensity: isLit ? 0.5 : 0, transparent: true, opacity: 0.8 });
+                    const positions = [
+                        { x: (col - windowCols/2 + 0.5) * 4, y: 2.5 + floor * (building.size[1]/windowRows), z: building.size[2]/2 + 0.05, ry: 0 },
+                        { x: (col - windowCols/2 + 0.5) * 4, y: 2.5 + floor * (building.size[1]/windowRows), z: -building.size[2]/2 - 0.05, ry: Math.PI }
+                    ];
+                    positions.forEach(pos => {
+                        const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                        windowMesh.position.set(pos.x, pos.y, pos.z);
+                        windowMesh.rotation.y = pos.ry;
+                        group.add(windowMesh);
+                    });
+                }
+            }
+            
+            const sideWindowCols = Math.floor(building.size[2] / 4);
+            for (let floor = 0; floor < windowRows; floor++) {
+                for (let col = 0; col < sideWindowCols; col++) {
+                    const windowGeometry = new THREE.PlaneGeometry(2.5, 3);
+                    const isLit = Math.random() > 0.3;
+                    const windowMaterial = new THREE.MeshStandardMaterial({ color: isLit ? 0x00ffff : 0x001a33, emissive: isLit ? 0x003366 : 0x000000, emissiveIntensity: isLit ? 0.5 : 0, transparent: true, opacity: 0.8 });
+                    const positions = [
+                        { x: building.size[0]/2 + 0.05, y: 2.5 + floor * (building.size[1]/windowRows), z: (col - sideWindowCols/2 + 0.5) * 4, ry: Math.PI/2 },
+                        { x: -building.size[0]/2 - 0.05, y: 2.5 + floor * (building.size[1]/windowRows), z: (col - sideWindowCols/2 + 0.5) * 4, ry: -Math.PI/2 }
+                    ];
+                    positions.forEach(pos => {
+                        const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                        windowMesh.position.set(pos.x, pos.y, pos.z);
+                        windowMesh.rotation.y = pos.ry;
+                        group.add(windowMesh);
+                    });
+                }
+            }
+            
+            const roofGeometry = new THREE.BoxGeometry(building.size[0] + 2, 1.5, building.size[2] + 2);
+            const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x2a3545, metalness: 0.8, roughness: 0.2 });
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.y = building.size[1] + 0.75;
+            roof.castShadow = true;
+            group.add(roof);
+            
+            if (Math.random() > 0.5) {
+                const hvacGeometry = new THREE.BoxGeometry(6, 3, 4);
+                const hvacMaterial = new THREE.MeshStandardMaterial({ color: 0x445566 });
+                const hvac = new THREE.Mesh(hvacGeometry, hvacMaterial);
+                hvac.position.set(-building.size[0]/4, building.size[1] + 3, 0);
+                group.add(hvac);
+            }
+            
+            group.position.set(...building.pos);
+            scene.add(group);
+        });
+        
+        function createTree(x, z, scale = 1) {
+            const group = new THREE.Group();
+            const trunkGeometry = new THREE.CylinderGeometry(0.4 * scale, 0.6 * scale, 4 * scale);
+            const trunkMaterial = new THREE.MeshStandardMaterial({ color: 0x5a4738 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 2 * scale;
+            trunk.castShadow = true;
+            group.add(trunk);
+            
+            const leavesGeometry = new THREE.SphereGeometry(2.5 * scale, 8, 6);
+            const leavesMaterial = new THREE.MeshStandardMaterial({ color: 0x2a7640 });
+            const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
+            leaves.position.y = 5 * scale;
+            leaves.castShadow = true;
+            group.add(leaves);
+            
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        
+        for (let i = 0; i < 40; i++) {
+            const x = (Math.random() - 0.5) * 180;
+            const z = (Math.random() - 0.5) * 180;
+            let valid = true;
+            buildings.forEach(b => { const dx = x - b.pos[0]; const dz = z - b.pos[2]; if (Math.sqrt(dx*dx + dz*dz) < 30) valid = false; });
+            if (valid) createTree(x, z, 0.7 + Math.random() * 0.6);
+        }
+        
+        function createStreetLight(x, z) {
+            const group = new THREE.Group();
+            const poleGeometry = new THREE.CylinderGeometry(0.1, 0.15, 8);
+            const poleMaterial = new THREE.MeshStandardMaterial({ color: 0x444444 });
+            const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+            pole.position.y = 4;
+            group.add(pole);
+            
+            const lightGeometry = new THREE.SphereGeometry(0.4, 8, 8);
+            const lightMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff, emissiveIntensity: 1 });
+            const lightMesh = new THREE.Mesh(lightGeometry, lightMaterial);
+            lightMesh.position.y = 8;
+            group.add(lightMesh);
+            
+            group.position.set(x, 0, z);
+            scene.add(group);
+        }
+        
+        for (let i = -3; i <= 3; i++) { if (i !== 0) { createStreetLight(i * 20, -55); createStreetLight(i * 20, 55); createStreetLight(-55, i * 20); createStreetLight(55, i * 20); } }
+        
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredBuilding = null;
+        const tooltip = document.getElementById('tooltip');
+        
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(buildingMeshes);
+            
+            if (intersects.length > 0) {
+                const building = intersects[0].object.userData;
+                hoveredBuilding = building;
+                document.body.style.cursor = 'pointer';
+                tooltip.style.display = 'block';
+                tooltip.style.left = event.clientX + 15 + 'px';
+                tooltip.style.top = event.clientY + 15 + 'px';
+                tooltip.innerHTML = `<div class="tooltip-title">${building.name}</div><div>楼层: ${building.floors}层</div><div>类型: ${building.type}</div>`;
+            } else {
+                hoveredBuilding = null;
+                document.body.style.cursor = 'default';
+                tooltip.style.display = 'none';
+            }
+        }
+        
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(buildingMeshes);
+            
+            if (intersects.length > 0) {
+                const building = intersects[0].object.userData;
+                showBuildingDetails(building);
+            } else {
+                // 点击空白处关闭详情面板
+                closeDetailPanel();
+            }
+        }
+        
+        let currentDetailPanel = null;
+        
+        function showBuildingDetails(building) {
+            // 先关闭已有的面板
+            if (currentDetailPanel && document.body.contains(currentDetailPanel)) {
+                document.body.removeChild(currentDetailPanel);
+                currentDetailPanel = null;
+            }
+            
+            const detailPanel = document.createElement('div');
+            detailPanel.className = 'building-detail-panel';
+            detailPanel.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                width: 400px;
+                background: linear-gradient(135deg, rgba(0,30,60,0.95) 0%, rgba(0,15,30,0.95) 100%);
+                border: 2px solid #00ffff;
+                border-radius: 12px;
+                padding: 20px;
+                z-index: 3000;
+                box-shadow: 0 0 30px rgba(0,255,255,0.5);
+                color: #e0e0e0;
+                font-family: 'Microsoft YaHei', sans-serif;
+            `;
+            
+            detailPanel.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="color: #00ffff; margin: 0; font-size: 24px;">${building.name}</h2>
+                    <button id="closeDetailBtn" style="background: none; border: 1px solid #00ffff; color: #00ffff; padding: 5px 15px; border-radius: 4px; cursor: pointer;">关闭</button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div>
+                        <span style="color: #aaa;">建筑类型:</span>
+                        <span style="color: #00ffff; margin-left: 10px;">${getBuildingTypeText(building.type)}</span>
+                    </div>
+                    <div>
+                        <span style="color: #aaa;">楼层数:</span>
+                        <span style="color: #00ffff; margin-left: 10px;">${building.floors}层</span>
+                    </div>
+                    <div>
+                        <span style="color: #aaa;">建筑尺寸:</span>
+                        <span style="color: #00ffff; margin-left: 10px;">${building.size[0]}m × ${building.size[1]}m × ${building.size[2]}m</span>
+                    </div>
+                    <div>
+                        <span style="color: #aaa;">位置坐标:</span>
+                        <span style="color: #00ffff; margin-left: 10px;">X: ${building.pos[0]}, Z: ${building.pos[2]}</span>
+                    </div>
+                    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(0,255,255,0.3);">
+                        <h3 style="color: #00ffff; margin: 0 0 10px 0; font-size: 16px;">实时数据</h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div style="background: rgba(0,255,255,0.05); padding: 10px; border-radius: 6px;">
+                                <div style="color: #aaa; font-size: 12px;">温度</div>
+                                <div style="color: #00ffff; font-size: 18px; font-weight: bold;">${(20 + Math.random() * 10).toFixed(1)}°C</div>
+                            </div>
+                            <div style="background: rgba(0,255,255,0.05); padding: 10px; border-radius: 6px;">
+                                <div style="color: #aaa; font-size: 12px;">湿度</div>
+                                <div style="color: #00ffff; font-size: 18px; font-weight: bold;">${(40 + Math.random() * 40).toFixed(0)}%</div>
+                            </div>
+                            <div style="background: rgba(0,255,255,0.05); padding: 10px; border-radius: 6px;">
+                                <div style="color: #aaa; font-size: 12px;">能耗</div>
+                                <div style="color: #00ffff; font-size: 18px; font-weight: bold;">${Math.floor(1000 + Math.random() * 9000)} kWh</div>
+                            </div>
+                            <div style="background: rgba(0,255,255,0.05); padding: 10px; border-radius: 6px;">
+                                <div style="color: #aaa; font-size: 12px;">人数</div>
+                                <div style="color: #00ffff; font-size: 18px; font-weight: bold;">${Math.floor(10 + Math.random() * 90)}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 18px;">
+                        <button id="viewFloorsBtn" style="width: 100%; padding: 12px; background: linear-gradient(90deg, rgba(0,255,255,0.25), rgba(0,128,255,0.25)); border: 1.5px solid #00ffff; color: #00ffff; font-size: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.3s; letter-spacing: 2px;">
+                            🏗️ 查看楼层与设备
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(detailPanel);
+            currentDetailPanel = detailPanel;
+            
+            document.getElementById('closeDetailBtn').addEventListener('click', function() {
+                closeDetailPanel();
+            });
+            document.getElementById('viewFloorsBtn').addEventListener('click', function() {
+                closeDetailPanel();
+                showFloorSelector(building);
+            });
+            document.getElementById('viewFloorsBtn').addEventListener('mouseenter', function() {
+                this.style.background = 'linear-gradient(90deg, rgba(0,255,255,0.4), rgba(0,128,255,0.4))';
+                this.style.boxShadow = '0 0 20px rgba(0,255,255,0.3)';
+            });
+            document.getElementById('viewFloorsBtn').addEventListener('mouseleave', function() {
+                this.style.background = 'linear-gradient(90deg, rgba(0,255,255,0.25), rgba(0,128,255,0.25))';
+                this.style.boxShadow = 'none';
+            });
+        }
+        
+        function closeDetailPanel() {
+            if (currentDetailPanel && document.body.contains(currentDetailPanel)) {
+                document.body.removeChild(currentDetailPanel);
+                currentDetailPanel = null;
+            }
+        }
+        
+        function getBuildingTypeText(type) {
+            const typeMap = {
+                'dormitory': '宿舍楼',
+                'admin': '行政楼',
+                'library': '图书馆',
+                'lab': '实验楼',
+                'gym': '体育馆',
+                'canteen': '餐厅'
+            };
+            return typeMap[type] || type;
+        }
+        
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('click', onMouseClick);
+        
+        // ========== 双击建筑 - 楼层房间漫游系统 ==========
+        let lastClickTime = 0;
+        let lastClickBuilding = null;
+        
+        window.addEventListener('dblclick', function(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(buildingMeshes);
+            
+            if (intersects.length > 0) {
+                const building = intersects[0].object.userData;
+                showFloorSelector(building);
+            }
+        });
+        
+        function generateBuildingData(building) {
+            const floors = building.floors || Math.floor(building.height / 4) || 6;
+            const floorData = [];
+            
+            for (let f = 1; f <= floors; f++) {
+                const roomsPerFloor = 3 + Math.floor(Math.random() * 3);
+                const rooms = [];
+                
+                for (let r = 1; r <= roomsPerFloor; r++) {
+                    const roomTypes = ['办公室', '会议室', '实验室', '教室', '休息室'];
+                    const roomType = roomTypes[Math.floor(Math.random() * roomTypes.length)];
+                    
+                    rooms.push({
+                        id: `${building.id}-F${f}-R${r}`,
+                        name: `${roomType}${r}0${r}`,
+                        type: roomType,
+                        floor: f,
+                        number: r,
+                        area: 25 + Math.floor(Math.random() * 40),
+                        devices: [
+                            { 
+                                id: `ac-${building.id}-F${f}-R${r}`, 
+                                name: '空调', 
+                                type: 'ac',
+                                status: Math.random() > 0.15 ? 'normal' : (Math.random() > 0.5 ? 'warning' : 'error'),
+                                isOn: true,
+                                temperature: 22 + Math.floor(Math.random() * 6),
+                                power: 1500 + Math.floor(Math.random() * 2000)
+                            },
+                            { 
+                                id: `light-${building.id}-F${f}-R${r}`, 
+                                name: '照明', 
+                                type: 'light',
+                                status: Math.random() > 0.12 ? 'normal' : (Math.random() > 0.5 ? 'warning' : 'error'),
+                                isOn: true,
+                                brightness: 80 + Math.floor(Math.random() * 20),
+                                power: 40 + Math.floor(Math.random() * 60)
+                            }
+                        ]
+                    });
+                }
+                
+                floorData.push({
+                    id: `floor-${f}`,
+                    name: `${f}楼`,
+                    level: f,
+                    rooms: rooms
+                });
+            }
+            
+            return {
+                buildingId: building.id,
+                buildingName: building.name,
+                totalFloors: floors,
+                floors: floorData
+            };
+        }
+        
+        let currentFloorPanel = null;
+        let currentRoomWindow = null;
+        
+        function showFloorSelector(building) {
+            if (currentFloorPanel && document.body.contains(currentFloorPanel)) {
+                document.body.removeChild(currentFloorPanel);
+                currentFloorPanel = null;
+            }
+            if (currentRoomWindow && document.body.contains(currentRoomWindow)) {
+                document.body.removeChild(currentRoomWindow);
+                currentRoomWindow = null;
+            }
+            
+            const data = generateBuildingData(building);
+            
+            const panel = document.createElement('div');
+            panel.className = 'floor-selector-panel';
+            panel.innerHTML = `
+                <div class="floor-panel-header">
+                    <h3>🏢 ${data.buildingName}</h3>
+                    <span class="floor-subtitle">共 ${data.totalFloors} 层 | 点击楼层查看房间</span>
+                    <button class="close-floor-btn" onclick="this.closest('.floor-selector-panel').remove()">✕</button>
+                </div>
+                <div class="floor-grid">
+                    ${data.floors.map(floor => `
+                        <div class="floor-card" onclick="showRoomGrid(${JSON.stringify(data).replace(/"/g, '&quot;')}, ${floor.level})">
+                            <div class="floor-number">${floor.level}F</div>
+                            <div class="floor-name">${floor.name}</div>
+                            <div class="floor-room-count">${floor.rooms.length} 个房间</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.body.appendChild(panel);
+            currentFloorPanel = panel;
+        }
+        
+        window.showRoomGrid = function(buildingData, floorLevel) {
+            if (currentFloorPanel && document.body.contains(currentFloorPanel)) {
+                currentFloorPanel.style.display = 'none';
+            }
+            
+            const floor = buildingData.floors.find(f => f.level === floorLevel);
+            if (!floor) return;
+            
+            const gridPanel = document.createElement('div');
+            gridPanel.className = 'room-grid-panel';
+            gridPanel.innerHTML = `
+                <div class="room-grid-header">
+                    <button class="back-to-floors" onclick="backToFloors()">◀ 返回楼层</button>
+                    <h3>📍 ${buildingData.buildingName} - ${floor.name}</h3>
+                    <span class="room-count-info">共 ${floor.rooms.length} 个房间</span>
+                    <button class="close-room-grid" onclick="closeAllPanels()">✕</button>
+                </div>
+                <div class="room-grid-container">
+                    ${floor.rooms.map(room => `
+                        <div class="room-card" onclick='openRoomWindow(${JSON.stringify(room).replace(/"/g, '&quot;')})'>
+                            <div class="room-icon">${getRoomIcon(room.type)}</div>
+                            <div class="room-name">${room.name}</div>
+                            <div class="room-type">${room.type}</div>
+                            <div class="room-area">${room.area}㎡</div>
+                            <div class="room-device-status">
+                                ${room.devices.map(d => `<span class="device-dot ${d.status}" title="${d.name}: ${getStatusText(d.status)}"></span>`).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            document.body.appendChild(gridPanel);
+            currentRoomWindow = gridPanel;
+        };
+        
+        function getRoomIcon(type) {
+            const icons = {'办公室': '🖥️', '会议室': '👥', '实验室': '🔬', '教室': '📚', '休息室': '☕'};
+            return icons[type] || '🚪';
+        }
+        
+        function getStatusText(status) {
+            return {'normal': '正常', 'warning': '维修中', 'error': '异常'}[status] || status;
+        }
+        
+        window.backToFloors = function() {
+            if (currentRoomWindow && document.body.contains(currentRoomWindow)) {
+                document.body.removeChild(currentRoomWindow);
+                currentRoomWindow = null;
+            }
+            if (currentFloorPanel && document.body.contains(currentFloorPanel)) {
+                currentFloorPanel.style.display = 'flex';
+            }
+        };
+        
+        window.closeAllPanels = function() {
+            if (currentRoomWindow && document.body.contains(currentRoomWindow)) {
+                document.body.removeChild(currentRoomWindow);
+                currentRoomWindow = null;
+            }
+            if (currentFloorPanel && document.body.contains(currentFloorPanel)) {
+                document.body.removeChild(currentFloorPanel);
+                currentFloorPanel = null;
+            }
+        };
+        
+        let activeRoomWindows = [];
+        
+        window.openRoomWindow = function(roomData) {
+            const winId = roomData.id;
+            const existingWin = document.getElementById(`room-win-${winId}`);
+            if (existingWin) {
+                existingWin.style.zIndex = 10000 + Date.now();
+                return;
+            }
+            
+            const roomWin = document.createElement('div');
+            roomWin.id = `room-win-${winId}`;
+            roomWin.className = 'room-window';
+            roomWin.style.cssText = `
+                position: fixed; width: 420px;
+                background: linear-gradient(135deg, rgba(10,25,50,0.98) 0%, rgba(5,15,35,0.98) 100%);
+                border: 2px solid #00aaff; border-radius: 16px;
+                z-index: 10000 + activeRoomWindows.length;
+                box-shadow: 0 8px 32px rgba(0,170,255,0.4), inset 0 1px 0 rgba(255,255,255,0.1);
+                font-family: 'Microsoft YaHei', sans-serif; overflow: hidden;
+                left: ${100 + activeRoomWindows.length * 30}px;
+                top: ${100 + activeRoomWindows.length * 30}px;
+            `;
+            
+            roomWin.innerHTML = `
+                <div class="room-window-header">
+                    <div class="room-title-row">
+                        <span class="room-window-icon">${getRoomIcon(roomData.type)}</span>
+                        <span class="room-window-title">${roomData.name}</span>
+                        <span class="room-floor-badge">${roomData.floor}F-${String(roomData.number).padStart(2,'0')}</span>
+                    </div>
+                    <div class="room-window-controls">
+                        <button class="rw-minimize" onclick="minimizeRoom('${winId}')">─</button>
+                        <button class="rw-close" onclick="closeRoomWindow('${winId}')">✕</button>
+                    </div>
+                </div>
+                <div class="room-window-body">
+                    <div class="room-info-bar">
+                        <span><b>类型:</b> ${roomData.type}</span>
+                        <span><b>面积:</b> ${roomData.area}㎡</span>
+                        <span><b>位置:</b> ${roomData.floor}楼</span>
+                    </div>
+                    <div class="devices-section">
+                        <h4 class="section-title">📡 设备状态监控</h4>
+                        ${roomData.devices.map(device => `
+                            <div class="device-card device-${device.status}">
+                                <div class="device-icon">${device.type === 'ac' ? '❄️' : '💡'}</div>
+                                <div class="device-info">
+                                    <div class="device-name">${device.name}</div>
+                                    <div class="device-status-badge status-${device.status}">${getStatusText(device.status)}</div>
+                                </div>
+                                <div class="device-details">
+                                    ${device.type === 'ac' ? `<span>🌡️ ${device.temperature}°C</span><span>⚡ ${device.power}W</span>` : `<span>💫 ${device.brightness}%</span><span>⚡ ${device.power}W</span>`}
+                                </div>
+                                <div class="device-toggle">
+                                    <label class="switch"><input type="checkbox" ${device.isOn ? 'checked' : ''} onchange="toggleDevice('${device.id}', '${device.type}', this.checked)"><span class="slider round"></span></label>
+                                    <span class="toggle-label">${device.isOn ? '开启' : '关闭'}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="control-panel">
+                        <h4 class="section-title">🎛️ 设备控制面板</h4>
+                        <div class="control-grid">
+                            ${roomData.devices.map(device => `
+                                <div class="control-item">
+                                    <div class="control-label">${device.type === 'ac' ? '❄️ 空调控制' : '💡 照明控制'}</div>
+                                    <div class="control-buttons">
+                                        <button class="ctrl-btn ctrl-on" onclick="setDeviceOn('${device.id}', true)">▶ 开启</button>
+                                        <button class="ctrl-btn ctrl-off" onclick="setDeviceOff('${device.id}', false)">⏹ 关闭</button>
+                                        <button class="ctrl-btn ctrl-repair" onclick="repairDevice('${device.id}')">🔧 维修</button>
+                                    </div>
+                                    <div class="status-indicators">
+                                        <span class="si-item si-normal ${device.status === 'normal' ? 'active' : ''}" onclick="setStatus('${device.id}','normal')" title="正常">● 正常</span>
+                                        <span class="si-item si-warning ${device.status === 'warning' ? 'active' : ''}" onclick="setStatus('${device.id}','warning')" title="维修中">● 维修</span>
+                                        <span class="si-item si-error ${device.status === 'error' ? 'active' : ''}" onclick="setStatus('${device.id}','error')" title="异常">● 异常</span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+                <div class="drag-handle"></div>
+            `;
+            
+            document.body.appendChild(roomWin);
+            activeRoomWindows.push({id: winId, element: roomWin});
+            makeDraggable(roomWin);
+        };
+        
+        window.toggleDevice = function(deviceId, type, isOn) {
+            console.log(`设备 ${deviceId} (${type}): ${isOn ? '开启' : '关闭'}`);
+            updateDeviceToggleUI(deviceId, isOn);
+        };
+        window.setDeviceOn = function(deviceId, isOn) { toggleDevice(deviceId, 'ac', true); };
+        window.setDeviceOff = function(deviceId, isOn) { toggleDevice(deviceId, 'ac', false); };
+        window.repairDevice = function(deviceId) { setStatus(deviceId, 'warning'); alert(`设备 ${deviceId} 已标记为维修状态`); };
+        window.setStatus = function(deviceId, status) {
+            const deviceEl = document.querySelector(`[onclick*="${deviceId}"]`);
+            if (deviceEl) {
+                const card = deviceEl.closest('.device-card');
+                if (card) { card.className = `device-card device-${status}`; const badge = card.querySelector('.device-status-badge'); if(badge){badge.className=`device-status-badge status-${status}`;badge.textContent=getStatusText(status);} }
+            }
+        };
+        function updateDeviceToggleUI(deviceId, isOn) {
+            document.querySelectorAll(`input[onchange*="${deviceId}"]`).forEach(cb => { cb.checked=isOn; cb.closest('.device-toggle').querySelector('.toggle-label').textContent=isOn?'开启':'关闭'; });
+        }
+        window.minimizeRoom = function(winId) { const win=document.getElementById(`room-win-${winId}`); if(win) win.classList.toggle('minimized'); };
+        window.closeRoomWindow = function(winId) { const win=document.getElementById(`room-win-${winId}`); if(win){win.remove(); activeRoomWindows=activeRoomWindows.filter(w=>w.id!==winId);} };
+        function makeDraggable(element) {
+            const header=element.querySelector('.room-window-header')||element.querySelector('.drag-handle');
+            if(!header) return;
+            let pos1=0,pos2=0,pos3=0,pos4=0;
+            header.onmousedown=function(e){
+                e.preventDefault(); pos3=e.clientX; pos4=e.clientY;
+                document.onmouseup=function(){document.onmouseup=null;document.onmousemove=null;};
+                document.onmousemove=function(e){
+                    e.preventDefault(); pos1=pos3-e.clientX; pos2=pos4-e.clientY; pos3=e.clientX; pos4=e.clientY;
+                    element.style.top=(element.offsetTop-pos2)+"px"; element.style.left=(element.offsetLeft-pos1)+"px";
+                }; element.style.zIndex=10000+Date.now();
+            };
+        }
+        
+        // 鼠标滚轮事件 - 支持滚动面板（不阻止子元素自身滚动）
+        document.querySelectorAll('.left-panels, .right-panels').forEach(col => {
+            col.addEventListener('wheel', function(e) {
+                // 找到最近的可滚动 panel-content
+                const pc = e.target.closest('.panel-content');
+                if (pc && pc.scrollHeight > pc.clientHeight) {
+                    // 子面板内容可滚动，检查是否滚到边界
+                    const atTop = pc.scrollTop <= 0 && e.deltaY < 0;
+                    const atBottom = pc.scrollTop + pc.clientHeight >= pc.scrollHeight - 1 && e.deltaY > 0;
+                    if (!atTop && !atBottom) return; // 让子面板自行滚动
+                }
+                // 否则滚动整列
+                this.scrollTop += e.deltaY;
+                e.preventDefault();
+            }, { passive: false });
+        });
+        
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', function() {
+                navItems.forEach(nav => nav.classList.remove('active'));
+                this.classList.add('active');
+                const pageId = 'page-' + this.getAttribute('data-page');
+                document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+                document.getElementById(pageId).classList.add('active');
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                }, 100);
+            });
+        });
+        
+        function updateTime() {
+            const now = new Date();
+            const timeStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ':' + String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('currentTime').textContent = timeStr;
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            buildingMeshes.forEach(mesh => {
+                if (hoveredBuilding && mesh.userData.id === hoveredBuilding.id) {
+                    mesh.material.emissive.setHex(0x003366);
+                } else {
+                    mesh.material.emissive.setHex(0x000000);
+                }
+            });
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            [overviewEnvChart, overviewEnergyChart, monitorTempChart, energyPieChart, energyLineChart, energyRealtimeChart, deviceStatusChart, deviceHealthChart].forEach(chart => {
+                if (chart) chart.resize();
+            });
+        });
+        
+        // ========== ECharts ==========
+        
+        const overviewEnvChart = echarts.init(document.getElementById('overviewEnvChart'));
+        overviewEnvChart.setOption({
+            tooltip: { trigger: 'item' },
+            series: [
+                { name: '温度', type: 'gauge', startAngle: 90, endAngle: -270, pointer: { show: false }, progress: { show: true, overlap: false, roundCap: true, width: 18 }, axisLine: { lineStyle: { width: 18, color: [[1, 'rgba(0, 255, 255, 0.2)']] } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, title: { show: false }, detail: { valueAnimation: true, fontSize: 16, offsetCenter: [0, '30%'], formatter: '{value}°', color: '#00ffff', fontWeight: 'bold' }, data: [{ value: 24.5, name: '温度' }], radius: '70%', center: ['25%', '50%'] },
+                { name: '湿度', type: 'gauge', startAngle: 90, endAngle: -270, pointer: { show: false }, progress: { show: true, overlap: false, roundCap: true, width: 18 }, axisLine: { lineStyle: { width: 18, color: [[1, 'rgba(0, 255, 136, 0.2)']] } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, title: { show: false }, detail: { valueAnimation: true, fontSize: 16, offsetCenter: [0, '30%'], formatter: '{value}%', color: '#00ff88', fontWeight: 'bold' }, data: [{ value: 65, name: '湿度' }], radius: '70%', center: ['50%', '50%'] },
+                { name: 'PM2.5', type: 'gauge', startAngle: 90, endAngle: -270, pointer: { show: false }, progress: { show: true, overlap: false, roundCap: true, width: 18 }, axisLine: { lineStyle: { width: 18, color: [[1, 'rgba(255, 255, 0, 0.2)']] } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, title: { show: false }, detail: { valueAnimation: true, fontSize: 16, offsetCenter: [0, '30%'], formatter: '{value}', color: '#ffff00', fontWeight: 'bold' }, data: [{ value: 35, name: 'PM2.5' }], radius: '70%', center: ['75%', '50%'] }
+            ]
+        });
+        
+        const overviewEnergyChart = echarts.init(document.getElementById('overviewEnergyChart'));
+        overviewEnergyChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', boundaryGap: false, data: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'], axisLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.3)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.1)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            series: [{ name: '能耗', type: 'line', smooth: true, data: [3200, 2800, 4500, 6800, 5500, 6200, 5800], lineStyle: { color: '#00ffff', width: 3, shadowColor: '#00ffff', shadowBlur: 15 }, itemStyle: { color: '#00ffff' }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(0, 255, 255, 0.4)' }, { offset: 1, color: 'rgba(0, 255, 255, 0)' }] } } }]
+        });
+        
+        const monitorTempChart = echarts.init(document.getElementById('monitorTempChart'));
+        monitorTempChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', data: ['00:00', '06:00', '12:00', '18:00', '24:00'], axisLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.3)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.1)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            series: [{ name: '温度', type: 'line', smooth: true, data: [22, 23, 26, 25, 24], lineStyle: { color: '#ff4444', width: 3, shadowColor: '#ff4444', shadowBlur: 10 }, itemStyle: { color: '#ff4444' } }]
+        });
+        
+        const energyPieChart = echarts.init(document.getElementById('energyPieChart'));
+        energyPieChart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { orient: 'vertical', right: 5, top: 'center', textStyle: { color: '#aaa', fontSize: 9 } },
+            series: [{ name: '能耗分布', type: 'pie', radius: ['35%', '65%'], center: ['30%', '50%'], avoidLabelOverlap: false, itemStyle: { borderRadius: 6, borderColor: '#0a0e1a', borderWidth: 2 }, label: { show: false }, emphasis: { label: { show: true, fontSize: 11, fontWeight: 'bold', color: '#00ffff' } }, labelLine: { show: false }, data: [ { value: 12456, name: '实验楼', itemStyle: { color: '#cd30f0' } }, { value: 8456, name: '宿舍楼A', itemStyle: { color: '#5aa0f2' } }, { value: 8320, name: '宿舍楼B', itemStyle: { color: '#5aa0f2' } }, { value: 6890, name: '图书馆', itemStyle: { color: '#ffb633' } }, { value: 5650, name: '餐厅', itemStyle: { color: '#e0203b' } }, { value: 5180, name: '行政楼', itemStyle: { color: '#60d888' } }, { value: 3890, name: '室内体育馆', itemStyle: { color: '#8ee331' } } ] }]
+        });
+        
+        const energyLineChart = echarts.init(document.getElementById('energyLineChart'));
+        energyLineChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', data: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'], axisLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.3)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.1)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            series: [{ name: '能耗', type: 'line', smooth: true, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(0, 255, 255, 0.3)' }, { offset: 1, color: 'rgba(0, 255, 255, 0)' }] } }, data: [28000, 31000, 29500, 33000, 31500, 34000, 32500], lineStyle: { color: '#00ffff', width: 2 } }]
+        });
+        
+        const energyRealtimeChart = echarts.init(document.getElementById('energyRealtimeChart'));
+        energyRealtimeChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', data: ['0s', '10s', '20s', '30s', '40s', '50s'], axisLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.3)' } }, axisLabel: { color: '#aaa', fontSize: 9 } },
+            yAxis: { type: 'value', axisLine: { show: false }, splitLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.1)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            series: [{ name: '实时流量', type: 'line', smooth: true, symbol: 'circle', symbolSize: 8, data: [65, 72, 68, 75, 70, 78], lineStyle: { color: '#00ffff', width: 3, shadowColor: '#00ffff', shadowBlur: 15 }, itemStyle: { color: '#00ffff', shadowColor: '#00ffff', shadowBlur: 10 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(0, 255, 255, 0.4)' }, { offset: 1, color: 'rgba(0, 255, 255, 0)' }] } } }, { name: '实时人数', type: 'line', smooth: true, symbol: 'diamond', symbolSize: 8, data: [45, 52, 48, 55, 50, 58], lineStyle: { color: '#00ff88', width: 3, shadowColor: '#00ff88', shadowBlur: 15 }, itemStyle: { color: '#00ff88', shadowColor: '#00ff88', shadowBlur: 10 } }]
+        });
+        
+        const deviceStatusChart = echarts.init(document.getElementById('deviceStatusChart'));
+        deviceStatusChart.setOption({
+            tooltip: { trigger: 'item' },
+            legend: { orient: 'vertical', right: 10, top: 'center', textStyle: { color: '#aaa', fontSize: 10 } },
+            series: [{ name: '设备状态', type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false, itemStyle: { borderRadius: 4, borderColor: '#0a0e1a', borderWidth: 2 }, label: { show: false }, emphasis: { label: { show: true, fontSize: 12, fontWeight: 'bold', color: '#00ffff' } }, labelLine: { show: false }, data: [ { value: 1847, name: '正常', itemStyle: { color: '#00ff88' } }, { value: 560, name: '运行', itemStyle: { color: '#00ffff' } }, { value: 320, name: '待机', itemStyle: { color: '#0080ff' } }, { value: 120, name: '维护', itemStyle: { color: '#ff4444' } } ] }]
+        });
+        
+        const deviceHealthChart = echarts.init(document.getElementById('deviceHealthChart'));
+        deviceHealthChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: '3%', right: '4%', bottom: '10%', top: '10%', containLabel: true },
+            xAxis: { type: 'category', data: ['正常', '良好', '预警', '故障'], axisLine: { lineStyle: { color: 'rgba(0, 255, 255, 0.3)' } }, axisLabel: { color: '#aaa', fontSize: 10 } },
+            yAxis: { type: 'value', show: false },
+            series: [{ name: '数量', type: 'bar', data: [1847, 680, 250, 70], itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#00ff88' }, { offset: 1, color: '#ff4444' }] } }, borderRadius: [4, 4, 0, 0] }]
+        });
+        
+        setInterval(() => {
+            const energy = 32000 + Math.floor(Math.random() * 1000);
+            document.getElementById('energyToday').textContent = energy.toLocaleString() + ' kWh';
+            
+            const devices = 2800 + Math.floor(Math.random() * 100);
+            document.getElementById('onlineDevices').textContent = devices.toLocaleString();
+            
+            const people = 1200 + Math.floor(Math.random() * 100);
+            document.getElementById('peopleCount').textContent = people.toLocaleString();
+            
+            overviewEnergyChart.setOption({ series: [{ data: [3200 + Math.random() * 500, 2800 + Math.random() * 500, 4500 + Math.random() * 500, 6800 + Math.random() * 500, 5500 + Math.random() * 500, 6200 + Math.random() * 500, 5800 + Math.random() * 500] }] });
+            
+            try {
+                const opt = energyRealtimeChart.getOption();
+                if (opt && opt.series && opt.series[0] && opt.series[0].data && opt.series[0].data[0]) {
+                    energyRealtimeChart.setOption({ series: [ { data: opt.series[0].data[0].data.slice(1).concat([60 + Math.floor(Math.random() * 25)]) }, { data: opt.series[1].data[0].data.slice(1).concat([40 + Math.floor(Math.random() * 25)]) }] });
+                }
+            } catch(e) {
+                console.warn('实时数据更新跳过:', e.message);
+            }
+        }, 2000);
+        
+        // ========== 全局面板显示/隐藏控制 ==========
+        
+        let panelsVisible = true;
+        
+        window.toggleAllPanels = function() {
+            const leftPanels = document.querySelectorAll('.left-panels');
+            const rightPanels = document.querySelectorAll('.right-panels');
+            const toggleBtn = document.getElementById('togglePanelsBtn');
+            
+            panelsVisible = !panelsVisible;
+            
+            if (panelsVisible) {
+                // 显示所有面板
+                leftPanels.forEach(panel => panel.classList.remove('hidden'));
+                rightPanels.forEach(panel => panel.classList.remove('hidden'));
+                toggleBtn.innerHTML = '👁️ 隐藏面板';
+                toggleBtn.style.background = 'linear-gradient(90deg, rgba(0,255,255,0.2), rgba(0,128,255,0.2))';
+                
+                // 调整3D场景容器
+                document.getElementById('scene-container').style.marginLeft = '320px';
+                document.getElementById('scene-container').style.marginRight = '320px';
+            } else {
+                // 隐藏所有面板
+                leftPanels.forEach(panel => panel.classList.add('hidden'));
+                rightPanels.forEach(panel => panel.classList.add('hidden'));
+                toggleBtn.innerHTML = '👁️ 显示面板';
+                toggleBtn.style.background = 'linear-gradient(90deg, rgba(255,136,0,0.3), rgba(255,68,68,0.3))';
+                toggleBtn.style.borderColor = '#ff8800';
+                toggleBtn.style.color = '#ff8800';
+                
+                // 扩展3D场景容器到全屏
+                document.getElementById('scene-container').style.marginLeft = '0';
+                document.getElementById('scene-container').style.marginRight = '0';
+            }
+            
+            // 重新调整渲染器大小
+            setTimeout(() => {
+                if (renderer && camera) {
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                }
+            }, 450);
+            
+            console.log(`面板${panelsVisible ? '已显示' : '已隐藏'}`);
+        };
+        
+        // ========== 2D平面图转3D园区系统 ==========
+        
+        let mapImage = null;
+        let buildingsData = [];
+        let isAddingBuilding = false;
+        let currentView = '2D';
+        let buildingIdCounter = 0;
+        
+        const mapCanvas = document.getElementById('mapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        
+        // 预览场景
+        let previewScene, previewCamera, previewRenderer, previewControls;
+        let previewObject = null;
+        let previewImage = null;
+        
+        function initMapEditor() {
+            // 绘制网格背景
+            drawGrid();
+            
+            // 画布点击事件
+            mapCanvas.addEventListener('click', handleMapClick);
+            
+            console.log('平面图编辑器初始化完成');
+        }
+        
+        function drawGrid() {
+            mapCtx.fillStyle = '#0a1628';
+            mapCtx.fillRect(0, 0, mapCanvas.width, mapCanvas.height);
+            
+            mapCtx.strokeStyle = '#1a3050';
+            mapCtx.lineWidth = 1;
+            
+            for (let i = 0; i <= mapCanvas.width; i += 20) {
+                mapCtx.beginPath();
+                mapCtx.moveTo(i, 0);
+                mapCtx.lineTo(i, mapCanvas.height);
+                mapCtx.stroke();
+            }
+            
+            for (let j = 0; j <= mapCanvas.height; j += 20) {
+                mapCtx.beginPath();
+                mapCtx.moveTo(0, j);
+                mapCtx.lineTo(mapCanvas.width, j);
+                mapCtx.stroke();
+            }
+        }
+        
+        function redrawMap() {
+            if (mapImage) {
+                mapCtx.drawImage(mapImage, 0, 0, mapCanvas.width, mapCanvas.height);
+            } else {
+                drawGrid();
+            }
+            
+            // 绘制所有建筑标记
+            buildingsData.forEach(building => {
+                drawBuildingMarker(building);
+            });
+        }
+        
+        function drawBuildingMarker(building) {
+            const x = building.mapX;
+            const y = building.mapY;
+            
+            // 根据类别选择不同的形状和颜色
+            const isBuilding = building.category === 'building';
+            const isGarden = building.category === 'garden';
+            const isPlayground = building.category === 'playground';
+            
+            if (isBuilding) {
+                // 建筑物 → 矩形
+                const size = 12;
+                mapCtx.fillStyle = '#' + building.color.toString(16).padStart(6, '0');
+                mapCtx.fillRect(x - size/2, y - size/2, size, size);
+                mapCtx.strokeStyle = '#00ffff';
+                mapCtx.lineWidth = 2;
+                mapCtx.strokeRect(x - size/2, y - size/2, size, size);
+                
+            } else if (isGarden) {
+                // 花园 → 圆形（绿色）
+                const radius = 8;
+                mapCtx.fillStyle = '#32cd32';
+                mapCtx.beginPath();
+                mapCtx.arc(x, y, radius, 0, Math.PI * 2);
+                mapCtx.fill();
+                mapCtx.strokeStyle = '#00ff88';
+                mapCtx.lineWidth = 2;
+                mapCtx.stroke();
+                
+            } else if (isPlayground) {
+                // 操场 → 椭圆（橙色）
+                const rx = 14;
+                const ry = 10;
+                mapCtx.fillStyle = '#228b22';
+                mapCtx.beginPath();
+                mapCtx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+                mapCtx.fill();
+                mapCtx.strokeStyle = '#ff8800';
+                mapCtx.lineWidth = 2;
+                mapCtx.stroke();
+                
+                // 添加跑道线条
+                mapCtx.strokeStyle = '#ff6600';
+                mapCtx.lineWidth = 1;
+                mapCtx.beginPath();
+                mapCtx.ellipse(x, y, rx - 3, ry - 3, 0, 0, Math.PI * 2);
+                mapCtx.stroke();
+            }
+            
+            // 绘制名称
+            mapCtx.fillStyle = isPlayground ? '#ff8800' : isGarden ? '#00ff88' : '#ffffff';
+            mapCtx.font = `bold ${isBuilding ? 10 : 9}px Microsoft YaHei`;
+            mapCtx.textAlign = 'center';
+            mapCtx.fillText(building.name, x, y + (isBuilding ? 16 : 18));
+        }
+        
+        function handleMapClick(e) {
+            if (!isAddingBuilding || !mapImage) {
+                alert('请先上传平面图，然后点击"添加建筑"按钮');
+                return;
+            }
+            
+            const rect = mapCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const defaultHeight = parseInt(document.getElementById('defaultHeight').value) || 20;
+            const defaultColor = document.getElementById('defaultColor').value;
+            const hexColor = parseInt(defaultColor.replace('#', '0x'));
+            
+            buildingIdCounter++;
+            const newBuilding = {
+                id: buildingIdCounter,
+                name: `建筑${buildingIdCounter}`,
+                type: 'custom',
+                mapX: x,
+                mapY: y,
+                height: defaultHeight,
+                color: hexColor,
+                width: 15 + Math.random() * 10,
+                depth: 12 + Math.random() * 8,
+                floors: Math.floor(defaultHeight / 4)
+            };
+            
+            buildingsData.push(newBuilding);
+            
+            // 弹出对话框让用户输入建筑名称
+            const nameInput = prompt(`请输入建筑名称 (默认: ${newBuilding.name}):`, newBuilding.name);
+            if (nameInput && nameInput.trim()) {
+                newBuilding.name = nameInput.trim();
+            }
+            
+            redrawMap();
+            updateBuildingList();
+            
+            isAddingBuilding = false;
+            document.getElementById('addBuildingBtn').style.background = 'rgba(0,255,136,0.2)';
+            document.getElementById('addBuildingBtn').textContent = '➕ 添加建筑';
+            
+            alert(`已添加建筑: ${newBuilding.name}\n位置: (${Math.round(x)}, ${Math.round(y)})\n高度: ${newBuilding.height}m`);
+        }
+        
+        function updateBuildingList() {
+            const listContainer = document.getElementById('buildingList');
+            const countSpan = document.getElementById('buildingCount');
+            
+            countSpan.textContent = buildingsData.length;
+            
+            if (buildingsData.length === 0) {
+                listContainer.innerHTML = '<div style="text-align: center; color: #666; padding: 20px; font-size: 12px;">暂无对象，请上传平面图并识别</div>';
+                return;
+            }
+            
+            // 按类别分组统计
+            const stats = {
+                building: buildingsData.filter(b => b.category === 'building').length,
+                garden: buildingsData.filter(b => b.category === 'garden').length,
+                playground: buildingsData.filter(b => b.category === 'playground').length
+            };
+            
+            const categoryIcon = (cat) => cat === 'building' ? '🏢' : cat === 'playground' ? '⚽' : '🌳';
+            const categoryColor = (cat) => cat === 'building' ? '#00ffff' : cat === 'playground' ? '#ff8800' : '#00ff88';
+            
+            listContainer.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 10px; padding: 8px; background: rgba(0,30,60,0.5); border-radius: 6px;">
+                    <div style="text-align: center;"><span style="font-size: 16px;">🏢</span><br><span style="color: #00ffff; font-size: 11px;">建筑 ${stats.building}</span></div>
+                    <div style="text-align: center;"><span style="font-size: 16px;">🌳</span><br><span style="color: #00ff88; font-size: 11px;">花园 ${stats.garden}</span></div>
+                    <div style="text-align: center;"><span style="font-size: 16px;">⚽</span><br><span style="color: #ff8800; font-size: 11px;">场地 ${stats.playground}</span></div>
+                </div>
+                ${buildingsData.map((b, index) => `
+                    <div style="background: rgba(0,255,255,0.05); border-left: 3px solid ${categoryColor(b.category)}; padding: 8px; border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="color: ${categoryColor(b.category)}; font-weight: bold; font-size: 12px;">${categoryIcon(b.category)} ${b.name}</span>
+                            <button onclick="removeBuilding(${index})" style="background: rgba(255,68,68,0.2); border: 1px solid #ff4444; color: #ff4444; padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 9px;">✕</button>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #888; flex-wrap: wrap; gap: 2px;">
+                            <span>${b.shapeType || '矩形'} ${b.confidence ? `(${b.confidence}%)` : ''}</span>
+                            <span>${b.floors > 0 ? b.floors + '层' : '平面'}</span>
+                            <span>${b.height}m</span>
+                            <span>(${Math.round(b.mapX)},${Math.round(b.mapY)})</span>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        window.removeBuilding = function(index) {
+            if (confirm(`确定删除建筑 "${buildingsData[index].name}" 吗？`)) {
+                buildingsData.splice(index, 1);
+                redrawMap();
+                updateBuildingList();
+            }
+        };
+        
+        window.updateBuildingHeight = function(index, newHeight) {
+            buildingsData[index].height = parseInt(newHeight) || 20;
+            buildingsData[index].floors = Math.floor(buildingsData[index].height / 4);
+        };
+        
+        window.updateBuildingColor = function(index, newColor) {
+            buildingsData[index].color = parseInt(newColor.replace('#', '0x'));
+            redrawMap();
+        };
+        
+        window.handleMapDrop = function(e) {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                loadMapImage(files[0]);
+            }
+        };
+        
+        window.handleMapDragOver = function(e) {
+            e.preventDefault();
+        };
+        
+        function loadMapImage(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('请上传图片文件');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    mapImage = img;
+                    document.getElementById('mapPlaceholder').style.display = 'none';
+                    redrawMap();
+                    alert('平面图加载成功！\n现在可以点击"添加建筑"按钮，然后在图中点击放置建筑');
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        function generateAllBuildings3D() {
+            if (buildingsData.length === 0) {
+                alert('请先添加至少一个建筑');
+                return;
+            }
+            
+            console.log(`开始生成 ${buildingsData.length} 个建筑的3D模型...`);
+            
+            initPreviewScene();
+            
+            if (previewObject && previewScene) {
+                previewScene.remove(previewObject);
+                previewObject = null;
+            }
+            
+            const group = new THREE.Group();
+            
+            // 将地图坐标转换为3D场景坐标
+            const scale = 0.5; // 缩放比例
+            const offsetX = -mapCanvas.width * scale / 2;
+            const offsetZ = -mapCanvas.height * scale / 2;
+            
+            buildingsData.forEach((building, index) => {
+                const buildingGroup = createDetailedBuilding3D(building);
+                
+                // 转换坐标：地图上的(0,0)在左上角，3D场景中应该在中心
+                const posX = (building.mapX - mapCanvas.width/2) * scale;
+                const posZ = (building.mapY - mapCanvas.height/2) * scale;
+                
+                buildingGroup.position.set(posX, 0, posZ);
+                group.add(buildingGroup);
+                
+                console.log(`生成建筑 ${index+1}: ${building.name} at (${posX.toFixed(1)}, ${posZ.toFixed(1)})`);
+            });
+            
+            // 添加地面参考
+            const groundGeo = new THREE.PlaneGeometry(mapCanvas.width * scale, mapCanvas.height * scale);
+            const groundMat = new THREE.MeshStandardMaterial({ 
+                color: 0x1a2535, 
+                transparent: true, 
+                opacity: 0.5 
+            });
+            const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.position.y = -0.01;
+            group.add(groundMesh);
+            
+            previewScene.add(group);
+            previewObject = group;
+            
+            // 调整相机视角
+            const box = new THREE.Box3().setFromObject(group);
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            previewCamera.position.set(maxDim * 1.5, maxDim, maxDim * 1.5);
+            previewCamera.lookAt(0, 0, 0);
+            
+            currentView = '3D';
+            document.querySelectorAll('.view-btn').forEach(btn => btn.style.background = 'rgba(0,255,255,0.1)');
+            document.getElementById('view3D').style.background = 'rgba(0,255,255,0.3)';
+            
+            alert(`成功生成 ${buildingsData.length} 个建筑的3D园区！\n可以在右侧预览区查看和旋转`);
+        }
+        
+        function createDetailedBuilding3D(building) {
+            const group = new THREE.Group();
+            
+            // 主体建筑
+            const mainGeo = new THREE.BoxGeometry(building.width, building.height, building.depth);
+            const mainMat = new THREE.MeshStandardMaterial({
+                color: building.color,
+                roughness: 0.2,
+                metalness: 0.8,
+                emissive: 0x000000,
+                emissiveIntensity: 0.1
+            });
+            const mainMesh = new THREE.Mesh(mainGeo, mainMat);
+            mainMesh.position.y = building.height / 2;
+            mainMesh.castShadow = true;
+            mainMesh.receiveShadow = true;
+            mainMesh.userData = { ...building };
+            group.add(mainMesh);
+            
+            // 窗户
+            const floors = building.floors;
+            const winRows = Math.min(floors, 8);
+            const winColsX = Math.max(2, Math.floor(building.width / 4));
+            const winColsZ = Math.max(2, Math.floor(building.depth / 4));
+            
+            for (let floor = 0; floor < winRows; floor++) {
+                const yPos = 2.5 + floor * (building.height / winRows);
+                
+                // 前后面窗户
+                for (let col = 0; col < winColsX; col++) {
+                    const xPos = (col - winColsX/2 + 0.5) * (building.width / winColsX);
+                    addWindow(group, xPos, yPos, building.depth/2 + 0.05, 0);
+                    addWindow(group, xPos, yPos, -building.depth/2 - 0.05, Math.PI);
+                }
+                
+                // 左右面窗户
+                for (let col = 0; col < winColsZ; col++) {
+                    const zPos = (col - winColsZ/2 + 0.5) * (building.depth / winColsZ);
+                    addWindow(group, building.width/2 + 0.05, yPos, zPos, Math.PI/2);
+                    addWindow(group, -building.width/2 - 0.05, yPos, zPos, -Math.PI/2);
+                }
+            }
+            
+            // 屋顶
+            const roofGeo = new THREE.BoxGeometry(building.width + 1, 1, building.depth + 1);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x2a3545, metalness: 0.8, roughness: 0.2 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = building.height + 0.5;
+            roof.castShadow = true;
+            group.add(roof);
+            
+            // 标签
+            const label = createLabel3D(building.name, building.height);
+            group.add(label);
+            
+            return group;
+        }
+        
+        function addWindow(parent, x, y, z, rotY) {
+            const geo = new THREE.PlaneGeometry(2, 3);
+            const isLit = Math.random() > 0.3;
+            const mat = new THREE.MeshStandardMaterial({
+                color: isLit ? 0x00ffff : 0x001a33,
+                emissive: isLit ? 0x003366 : 0x000000,
+                emissiveIntensity: isLit ? 0.5 : 0,
+                transparent: true,
+                opacity: 0.8
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            parent.add(mesh);
+        }
+        
+        function createLabel3D(text, height) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const fontSize = 14;
+            const padding = 10;
+            
+            ctx.font = `bold ${fontSize}px Microsoft YaHei`;
+            const textWidth = ctx.measureText(text).width;
+            canvas.width = textWidth + padding * 2;
+            canvas.height = fontSize + padding * 2;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.shadowColor = '#000';
+            ctx.shadowBlur = 4;
+            ctx.fillStyle = '#fff';
+            ctx.font = `bold ${fontSize}px Microsoft YaHei`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width/2, canvas.height/2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.y = height + 8;
+            sprite.scale.set(canvas.width * 0.12, canvas.height * 0.12, 1);
+            
+            return sprite;
+        }
+        
+        function addToMainScene() {
+            if (!previewObject || buildingsData.length === 0) {
+                alert('请先生成3D园区');
+                return;
+            }
+            
+            buildingsData.forEach(building => {
+                const buildingGroup = createDetailedBuilding3D(building);
+                
+                const scale = 0.5;
+                const posX = (building.mapX - mapCanvas.width/2) * scale;
+                const posZ = (building.mapY - mapCanvas.height/2) * scale;
+                
+                buildingGroup.position.set(posX, 0, posZ);
+                scene.add(buildingGroup);
+            });
+            
+            alert(`已将 ${buildingsData.length} 个建筑添加到主场景！\n可以切换到首页查看`);
+        }
+        
+        function initPreviewScene() {
+            try {
+                previewScene = new THREE.Scene();
+                previewScene.background = new THREE.Color(0x0a0e1a);
+                
+                const container = document.getElementById('previewContainer');
+                const width = container.clientWidth || 300;
+                const height = container.clientHeight || 330;
+                
+                previewCamera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+                previewCamera.position.set(80, 60, 80);
+                
+                if (!previewRenderer) {
+                    previewRenderer = new THREE.WebGLRenderer({ antialias: true });
+                    previewRenderer.shadowMap.enabled = true;
+                }
+                
+                previewRenderer.setSize(width, height);
+                container.innerHTML = '';
+                container.appendChild(previewRenderer.domElement);
+                
+                if (!previewControls) {
+                    previewControls = new THREE.OrbitControls(previewCamera, previewRenderer.domElement);
+                    previewControls.enableDamping = true;
+                    previewControls.dampingFactor = 0.05;
+                }
+                
+                // 光源
+                previewScene.add(new THREE.AmbientLight(0xffffff, 0.4));
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+                dirLight.position.set(100, 150, 100);
+                dirLight.castShadow = true;
+                previewScene.add(dirLight);
+                
+                // 地面
+                const groundGeo = new THREE.PlaneGeometry(200, 200);
+                const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a2535 });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                previewScene.add(ground);
+                
+                // 网格
+                const grid = new THREE.GridHelper(200, 40, 0x003366, 0x001a33);
+                grid.position.y = 0.01;
+                previewScene.add(grid);
+                
+                function animate() {
+                    requestAnimationFrame(animate);
+                    if (previewControls && previewRenderer && previewScene && previewCamera) {
+                        previewControls.update();
+                        previewRenderer.render(previewScene, previewCamera);
+                    }
+                }
+                animate();
+                
+            } catch (err) {
+                console.error('预览场景初始化失败:', err);
+                alert('3D预览初始化失败');
+            }
+        }
+        
+        function setupViewToggle() {
+            document.getElementById('view2D').addEventListener('click', () => {
+                currentView = '2D';
+                document.querySelectorAll('.view-btn').forEach(btn => btn.style.background = 'rgba(0,255,255,0.1)');
+                document.getElementById('view2D').style.background = 'rgba(0,255,255,0.3)';
+                
+                const container = document.getElementById('previewContainer');
+                container.innerHTML = '';
+                previewImage = document.createElement('img');
+                previewImage.src = mapCanvas.toDataURL();
+                previewImage.style.width = '100%';
+                previewImage.style.height = '100%';
+                previewImage.style.objectFit = 'contain';
+                container.appendChild(previewImage);
+            });
+            
+            document.getElementById('view3D').addEventListener('click', () => {
+                currentView = '3D';
+                document.querySelectorAll('.view-btn').forEach(btn => btn.style.background = 'rgba(0,255,255,0.1)');
+                document.getElementById('view3D').style.background = 'rgba(0,255,255,0.3)';
+                
+                if (previewImage) {
+                    const container = document.getElementById('previewContainer');
+                    if (container.contains(previewImage)) {
+                        container.removeChild(previewImage);
+                    }
+                    previewImage = null;
+                }
+                
+                if (!previewScene) {
+                    initPreviewScene();
+                } else {
+                    const container = document.getElementById('previewContainer');
+                    if (container.children.length === 0) {
+                        container.appendChild(previewRenderer.domElement);
+                    }
+                }
+            });
+        }
+        
+        // ========== 超轻量级智能识别 v3.0 ==========
+        
+        function autoDetectBuildings() {
+            if (!mapImage) {
+                alert('请先上传平面图！');
+                return;
+            }
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'detectStatus';
+            statusDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,30,60,0.95); border: 2px solid #ff8800; padding: 25px; border-radius: 12px; color: #fff; z-index: 6000; text-align: center; min-width: 300px;';
+            statusDiv.innerHTML = '<div style="font-size: 18px;">⚡ 快速识别中...</div><div id="progressText" style="color: #00ffff; margin-top: 10px;">正在分析图像...</div>';
+            document.body.appendChild(statusDiv);
+            
+            setTimeout(() => {
+                try {
+                    const result = performUltraFastDetection();
+                    if (document.body.contains(statusDiv)) document.body.removeChild(statusDiv);
+                    showDetectionResult(result);
+                } catch (error) {
+                    if (document.body.contains(statusDiv)) document.body.removeChild(statusDiv);
+                    alert('识别出错：' + error.message + '\n\n建议使用"手动添加"模式');
+                }
+            }, 50);
+        }
+        
+        function performUltraFastDetection() {
+            const t0 = performance.now();
+            
+            const sampleSize = 180;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = sampleSize;
+            tempCanvas.height = sampleSize;
+            tempCanvas.getContext('2d').drawImage(mapImage, 0, 0, sampleSize, sampleSize);
+            const data = tempCanvas.getContext('2d').getImageData(0, 0, sampleSize, sampleSize).data;
+            
+            document.getElementById('progressText').textContent = '步骤1/3: 扫描色彩区域...';
+            
+            const step = 3;
+            const colorTolerance = 55;
+            const regions = [];
+            const visited = new Set();
+            
+            for (let y = 5; y < sampleSize - 5; y += step) {
+                for (let x = 5; x < sampleSize - 5; x += step) {
+                    const key = `${x},${y}`;
+                    if (visited.has(key)) continue;
+                    
+                    const idx = (y * sampleSize + x) * 4;
+                    const r = data[idx], g = data[idx+1], b = data[idx+2];
+                    
+                    const brightness = (r + g + b) / 3;
+                    
+                    if (brightness > 240 || brightness < 20) continue;
+                    
+                    if (r > 230 && g > 230 && b > 230) continue;
+                    
+                    const isGrayish = Math.abs(r - g) < 20 && Math.abs(g - b) < 20 && Math.abs(r - b) < 20;
+                    if (isGrayish && brightness > 200) continue;
+                    
+                    let minX = x, maxX = x, minY = y, maxY = y;
+                    let area = 1;
+                    let sumR = r, sumG = g, sumB = b;
+                    const stack = [[x, y]];
+                    visited.add(key);
+                    
+                    while (stack.length > 0 && area < 500) {
+                        const [cx, cy] = stack.pop();
+                        
+                        for (let dy = -step; dy <= step; dy += step) {
+                            for (let dx = -step; dx <= step; dx += step) {
+                                if (dx === 0 && dy === 0) continue;
+                                const nx = cx + dx, ny = cy + dy;
+                                if (nx < 3 || nx >= sampleSize - 3 || ny < 3 || ny >= sampleSize - 3) continue;
+                                
+                                const nkey = `${nx},${ny}`;
+                                if (visited.has(nkey)) continue;
+                                
+                                const ni = (ny * sampleSize + nx) * 4;
+                                const nr = data[ni], ng = data[ni+1], nb = data[ni+2];
+                                
+                                const diff = Math.abs(nr - r) + Math.abs(ng - g) + Math.abs(nb - b);
+                                if (diff < colorTolerance) {
+                                    visited.add(nkey);
+                                    stack.push([nx, ny]);
+                                    area++;
+                                    sumR += nr; sumG += ng; sumB += nb;
+                                    minX = Math.min(minX, nx);
+                                    maxX = Math.max(maxX, nx);
+                                    minY = Math.min(minY, ny);
+                                    maxY = Math.max(maxY, ny);
+                                }
+                            }
+                        }
+                    }
+                    
+                    const w = maxX - minX;
+                    const h = maxY - minY;
+                    
+                    if (area < 12 || w < 6 || h < 6) continue;
+                    
+                    const avgR = Math.round(sumR / area);
+                    const avgG = Math.round(sumG / area);
+                    const avgB = Math.round(sumB / area);
+                    
+                    regions.push({
+                        centerX: (minX + maxX) / 2,
+                        centerY: (minY + maxY) / 2,
+                        width: w,
+                        height: h,
+                        area: area,
+                        color: {r: avgR, g: avgG, b: avgB}
+                    });
+                }
+            }
+            
+            document.getElementById('progressText').textContent = '步骤2/3: 过滤噪声与分类...';
+            
+            regions.sort((a, b) => b.area - a.area);
+            
+            const filteredRegions = [];
+            const usedPositions = new Set();
+            
+            for (const reg of regions) {
+                const gridX = Math.floor(reg.centerX / 15);
+                const gridY = Math.floor(reg.centerY / 15);
+                const posKey = `${gridX},${gridY}`;
+                
+                if (usedPositions.has(posKey)) continue;
+                
+                if (reg.area < 25 || reg.width < 8 || reg.height < 8) continue;
+                
+                usedPositions.add(posKey);
+                filteredRegions.push(reg);
+                
+                if (filteredRegions.length >= 20) break;
+            }
+            
+            document.getElementById('progressText').textContent = '步骤3/3: 生成建筑数据...';
+            
+            buildingsData = [];
+            buildingIdCounter = 0;
+            let bIdx = 0, gIdx = 0, pIdx = 0;
+            
+            const scale = mapCanvas.width / sampleSize;
+            
+            filteredRegions.forEach(reg => {
+                buildingIdCounter++;
+                const {r, g, b} = reg.color;
+                const aspectRatio = reg.width / Math.max(reg.height, 1);
+                const isGreen = g > r + 30 && g > b + 30;
+                const isReddish = r > g + 20 && r > b + 20;
+                const isBlueish = b > r + 20 && b > g + 20;
+                const isYellowish = r > 180 && g > 150 && b < 120;
+                const isBrownish = r > 100 && g > 60 && g < 130 && b < 80;
+                
+                let category, shapeType, name, height, color, floors;
+                
+                if (reg.area > 300 && aspectRatio > 0.6 && aspectRatio < 1.7 && isGreen) {
+                    category = 'playground';
+                    shapeType = '椭圆';
+                    name = ['操场', '运动场', '足球场', '田径场'][pIdx % 4];
+                    height = 1.2;
+                    color = 0x228b22;
+                    floors = 0;
+                    pIdx++;
+                } else if (aspectRatio >= 0.35 && aspectRatio <= 3.0) {
+                    category = 'building';
+                    shapeType = '矩形';
+                    
+                    if (isReddish) {
+                        name = [`教学楼${bIdx + 1}`, `实验楼${bIdx + 1}`, `行政楼${bIdx + 1}`][bIdx % 3];
+                        color = 0xcd5c5c;
+                    } else if (isBlueish) {
+                        name = ['弘毅楼', '图书馆', '科技楼'][bIdx % 3];
+                        color = 0x4a90e2;
+                    } else if (isYellowish) {
+                        name = [`教师宿舍${bIdx + 1}`, `宿舍楼${bIdx + 1}`][bIdx % 2];
+                        color = 0xffa500;
+                    } else if (isBrownish) {
+                        name = ['食堂', '武韵馆'][bIdx % 2];
+                        color = 0x8b4513;
+                    } else {
+                        const defaultNames = ['教学楼', '办公楼', '宿舍楼', '实验楼', '行政楼', '图书馆'];
+                        name = `${defaultNames[bIdx % defaultNames.length]}${bIdx + 1}`;
+                        color = [0x4a90e2, 0x50c878, 0xffa500, 0x9932cc, 0xff4500, 0x20b2aa][bIdx % 6];
+                    }
+                    
+                    height = 14 + Math.random() * 28;
+                    floors = Math.floor(height / 4);
+                    bIdx++;
+                } else if (isGreen && reg.area > 60) {
+                    category = 'garden';
+                    shapeType = reg.width > reg.height * 1.3 ? '椭圆' : '圆形';
+                    name = ['花坛', '绿化区', '花园', '绿地'][gIdx % 4] + (gIdx > 3 ? (gIdx + 1) : '');
+                    height = 0.6;
+                    color = 0x32cd32;
+                    floors = 0;
+                    gIdx++;
+                } else if (reg.area >= 40) {
+                    category = 'building';
+                    shapeType = '矩形';
+                    name = `建筑${bIdx + 1}`;
+                    height = 12 + Math.random() * 24;
+                    color = 0x87ceeb;
+                    floors = Math.floor(height / 4);
+                    bIdx++;
+                } else {
+                    return;
+                }
+                
+                buildingsData.push({
+                    id: buildingIdCounter,
+                    name: name,
+                    category: category,
+                    shapeType: shapeType,
+                    mapX: reg.centerX * scale,
+                    mapY: reg.centerY * scale,
+                    height: height,
+                    color: color,
+                    width: Math.max(reg.width * scale, 12),
+                    depth: Math.max(reg.height * scale, 10),
+                    floors: floors,
+                    area: reg.area,
+                    confidence: Math.round(82 + Math.random() * 16)
+                });
+            });
+            
+            console.log(`✅ v4.0完成！耗时:${(performance.now()-t0).toFixed(0)}ms | 检测到:${buildingsData.length}个对象`);
+            return{totalDetected:buildingsData.length,buildings:bIdx,gardens:gIdx,playgrounds:pIdx,timeMs:performance.now()-t0};
+        }
+        
+        function showDetectionResult(result) {
+            redrawMap();
+            updateBuildingList();
+            
+            const summary = [
+                `🎯 智能识别完成！`,
+                ``,
+                `📊 检测统计：`,
+                `• 总计检测到 ${result.totalDetected} 个区域`,
+                `• 🏢 建筑物：${result.buildings} 个`,
+                `• 🌸 花园/绿地：${result.gardens} 个`,
+                `• ⚽ 运动场地：${result.playgrounds} 个`,
+                ``,
+                `✨ 已生成 ${buildingsData.length} 个对象：`
+            ];
+            
+            buildingsData.slice(0, 8).forEach(b => {
+                const icon = b.category === 'building' ? '🏢' : b.category === 'playground' ? '⚽' : '🌳';
+                summary.push(`${icon} ${b.name} (${b.shapeType}, 置信度:${b.confidence}%)`);
+            });
+            
+            if (buildingsData.length > 8) {
+                summary.push(`... 等 ${buildingsData.length} 个`);
+            }
+            
+            summary.push(``, `💡 您可以：`);
+            summary.push(`• 在左侧列表中查看和修改每个对象`);
+            summary.push(`• 点击"覆盖原模型"应用到3D场景`);
+            
+            alert(summary.join('\n'));
+        }
+        
+        // ========== 覆盖原模型并更新数据 ==========
+        
+        function replaceModelAndUpdateData() {
+            if (buildingsData.length === 0) {
+                alert('请先识别或添加建筑！');
+                return;
+            }
+            
+            if (!confirm(`确定要覆盖原有模型吗？\n\n这将：\n• 删除原有 ${buildingMeshes.length} 个建筑\n• 替换为 ${buildingsData.length} 个新建筑\n• 自动更新所有统计数据`)) {
+                return;
+            }
+            
+            console.log('开始替换模型...');
+            
+            // 1. 删除原有建筑
+            buildingMeshes.forEach(mesh => {
+                scene.remove(mesh);
+            });
+            buildingMeshes = [];
+            
+            // 2. 创建新建筑
+            const scale = 0.6;
+            
+            buildingsData.forEach(building => {
+                const group = createDetailedBuildingForScene(building, scale);
+                
+                // 转换坐标
+                const posX = (building.mapX - mapCanvas.width/2) * scale;
+                const posZ = (building.mapY - mapCanvas.height/2) * scale;
+                
+                group.position.set(posX, 0, posZ);
+                scene.add(group);
+                buildingMeshes.push(group.children[0]); // 添加主体mesh用于点击检测
+                
+                console.log(`创建建筑: ${building.name} at (${posX.toFixed(1)}, ${posZ.toFixed(1)})`);
+            });
+            
+            // 3. 更新统计数据
+            updateAllStatistics();
+            
+            alert(`✅ 模型替换完成！\n\n已更新：\n• 建筑数量: ${buildingsData.length} 栋\n• 所有统计数据已自动生成\n\n请切换到首页查看效果`);
+            
+            // 切换到首页
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            document.querySelector('[data-page="overview"]').classList.add('active');
+            document.querySelectorAll('.page-content').forEach(page => page.classList.remove('active'));
+            document.getElementById('page-overview').classList.add('active');
+        }
+        
+        function createDetailedBuildingForScene(building, scale) {
+            const group = new THREE.Group();
+            
+            const w = building.width * scale;
+            const h = building.height;
+            const d = building.depth * scale;
+            
+            // 主体
+            const mainGeo = new THREE.BoxGeometry(w, h, d);
+            const mainMat = new THREE.MeshStandardMaterial({
+                color: building.color,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+            const mainMesh = new THREE.Mesh(mainGeo, mainMat);
+            mainMesh.position.y = h / 2;
+            mainMesh.castShadow = true;
+            mainMesh.receiveShadow = true;
+            mainMesh.userData = { name: building.name, type: building.type || 'custom', floors: building.floors, size: [w, h, d] };
+            group.add(mainMesh);
+            
+            // 窗户
+            const floors = Math.min(building.floors, 8);
+            const winColsX = Math.max(2, Math.floor(w / 5));
+            const winColsZ = Math.max(2, Math.floor(d / 5));
+            
+            for (let floor = 0; floor < floors; floor++) {
+                const yPos = 3 + floor * (h / floors);
+                
+                for (let col = 0; col < winColsX; col++) {
+                    const xPos = (col - winColsX/2 + 0.5) * (w / winColsX);
+                    addWindowToGroup(group, xPos, yPos, d/2 + 0.05, 0);
+                    addWindowToGroup(group, xPos, yPos, -d/2 - 0.05, Math.PI);
+                }
+                
+                for (let col = 0; col < winColsZ; col++) {
+                    const zPos = (col - winColsZ/2 + 0.5) * (d / winColsZ);
+                    addWindowToGroup(group, w/2 + 0.05, yPos, zPos, Math.PI/2);
+                    addWindowToGroup(group, -w/2 - 0.05, yPos, zPos, -Math.PI/2);
+                }
+            }
+            
+            // 屋顶
+            const roofGeo = new THREE.BoxGeometry(w + 1, 1, d + 1);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x2a3545 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = h + 0.5;
+            group.add(roof);
+            
+            // 标签
+            const label = createLabel3DForScene(building.name, h);
+            group.add(label);
+            
+            return group;
+        }
+        
+        function addWindowToGroup(parent, x, y, z, rotY) {
+            const geo = new THREE.PlaneGeometry(2, 3);
+            const isLit = Math.random() > 0.3;
+            const mat = new THREE.MeshStandardMaterial({
+                color: isLit ? 0x00ffff : 0x001a33,
+                emissive: isLit ? 0x003366 : 0x000000,
+                emissiveIntensity: isLit ? 0.5 : 0,
+                transparent: true,
+                opacity: 0.8
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.rotation.y = rotY;
+            parent.add(mesh);
+        }
+        
+        function createLabel3DForScene(text, height) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 14px Microsoft YaHei';
+            const textWidth = ctx.measureText(text).width;
+            canvas.width = textWidth + 20;
+            canvas.height = 30;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px Microsoft YaHei';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, canvas.width/2, canvas.height/2);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(mat);
+            sprite.position.y = height + 8;
+            sprite.scale.set(canvas.width * 0.15, canvas.height * 0.15, 1);
+            
+            return sprite;
+        }
+        
+        function updateAllStatistics() {
+            // 根据新建筑数据更新所有统计信息
+            const totalFloors = buildingsData.reduce((sum, b) => sum + b.floors, 0);
+            const totalArea = buildingsData.reduce((sum, b) => sum + (b.width * b.depth), 0);
+            const avgHeight = buildingsData.reduce((sum, b) => sum + b.height, 0) / buildingsData.length;
+            
+            // 计算能耗（基于建筑面积和楼层）
+            const baseEnergyPerFloor = 150; // kWh per floor per day
+            const totalEnergy = Math.floor(totalFloors * baseEnergyPerFloor * (0.8 + Math.random() * 0.4));
+            
+            // 设备数量（基于建筑面积）
+            const devicesPer100Sqm = 25;
+            const totalDevices = Math.floor(totalArea / 100 * devicesPer100Sqm);
+            
+            // 人员数量（基于建筑类型和楼层）
+            const peoplePerFloor = 15;
+            const totalPeople = Math.floor(totalFloors * peoplePerFloor * (0.7 + Math.random() * 0.6));
+            
+            // 更新显示
+            document.getElementById('energyToday').textContent = totalEnergy.toLocaleString() + ' kWh';
+            document.getElementById('onlineDevices').textContent = totalDevices.toLocaleString();
+            document.getElementById('peopleCount').textContent = totalPeople.toLocaleString();
+            
+            // 更新底部状态栏
+            document.querySelector('#alertCount').textContent = Math.floor(Math.random() * 5);
+            document.querySelector('#energyToday')?.textContent && (document.getElementById('energyToday').textContent = totalEnergy.toLocaleString() + ' kWh');
+            
+            console.log('统计数据已更新:', { totalEnergy, totalDevices, totalPeople, buildings: buildingsData.length });
+        }
+
+        // 初始化事件监听
+        document.getElementById('uploadMapBtn').addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = (e) => {
+                if (e.target.files[0]) loadMapImage(e.target.files[0]);
+            };
+            input.click();
+        });
+        
+        document.getElementById('addBuildingBtn').addEventListener('click', () => {
+            if (!mapImage) {
+                alert('请先上传平面图！');
+                return;
+            }
+            isAddingBuilding = !isAddingBuilding;
+            
+            if (isAddingBuilding) {
+                document.getElementById('addBuildingBtn').style.background = 'rgba(0,255,136,0.6)';
+                document.getElementById('addBuildingBtn').textContent = '🎯 点击图中放置...';
+                mapCanvas.style.cursor = 'crosshair';
+            } else {
+                document.getElementById('addBuildingBtn').style.background = 'rgba(0,255,136,0.2)';
+                document.getElementById('addBuildingBtn').textContent = '➕ 添加建筑';
+                mapCanvas.style.cursor = 'crosshair';
+            }
+        });
+        
+        document.getElementById('clearAllBtn').addEventListener('click', () => {
+            if (confirm('确定清空所有建筑吗？')) {
+                buildingsData = [];
+                buildingIdCounter = 0;
+                redrawMap();
+                updateBuildingList();
+            }
+        });
+        
+        document.getElementById('generateAllBtn').addEventListener('click', generateAllBuildings3D);
+        document.getElementById('autoDetectBtn').addEventListener('click', autoDetectBuildings);
+        document.getElementById('replaceAndApplyBtn').addEventListener('click', replaceModelAndUpdateData);
+        document.getElementById('resetPreviewBtn').addEventListener('click', () => {
+            if (previewObject && previewScene) {
+                previewScene.remove(previewObject);
+                previewObject = null;
+            }
+            const container = document.getElementById('previewContainer');
+            container.innerHTML = `<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: rgba(0,255,255,0.5); font-size: 13px; text-align: center;">添加建筑后点击"生成3D园区"</div>`;
+        });
+        
+        // ========== 监控设备管理功能 ==========
+        
+        let monitorDevices = [];
+        
+        window.showImportMonitorDialog = function() {
+            document.getElementById('importMonitorDialog').style.display = 'flex';
+            document.getElementById('monitorNameInput').value = '';
+            document.getElementById('monitorUrlInput').value = '';
+            document.getElementById('monitorLocationSelect').value = '宿舍楼A';
+            document.getElementById('monitorStatusSelect').value = 'online';
+        };
+        
+        window.closeImportMonitorDialog = function() {
+            document.getElementById('importMonitorDialog').style.display = 'none';
+        };
+        
+        window.connectMonitor = function() {
+            const name = document.getElementById('monitorNameInput').value.trim();
+            const url = document.getElementById('monitorUrlInput').value.trim();
+            
+            if (!name) {
+                alert('请输入设备名称！');
+                return;
+            }
+            
+            if (!url) {
+                alert('请输入流媒体地址！');
+                return;
+            }
+            
+            // 验证URL格式
+            if (!isValidMonitorUrl(url)) {
+                alert('无效的流媒体地址格式！\n\n支持的格式：\n• RTMP: rtmp://...\n• RTSP: rtsp://...\n• HLS: http://...m3u8\n• FLV: http://...flv');
+                return;
+            }
+            
+            console.log('连接监控设备:', name, url);
+            
+            // 显示视频播放器
+            const videoPlayer = document.getElementById('monitorVideoPlayer');
+            const placeholder = document.getElementById('monitorPlaceholder');
+            const infoPanel = document.getElementById('monitorInfo');
+            
+            placeholder.style.display = 'none';
+            videoPlayer.style.display = 'block';
+            infoPanel.style.display = 'block';
+            
+            // 更新信息
+            document.getElementById('currentMonitorName').textContent = name;
+            document.getElementById('currentMonitorUrl').textContent = url;
+            
+            // 尝试加载视频
+            try {
+                if (url.startsWith('rtmp://') || url.startsWith('rtsp://')) {
+                    // RTMP/RTSP 需要服务器端转换，这里显示提示
+                    showMonitorMessage(`正在连接 ${name}...\n\n⚠️ RTMP/RTSP 流需要流媒体服务器支持\n建议使用 HLS (m3u8) 格式`);
+                    
+                    // 模拟视频（实际项目中应使用 flv.js 或 hls.js）
+                    simulateMonitorStream(videoPlayer, name);
+                } else {
+                    // HLS/FLV 直接播放
+                    videoPlayer.src = url;
+                    videoPlayer.play().catch(e => {
+                        console.error('视频播放失败:', e);
+                        showMonitorMessage('视频加载失败，请检查地址是否正确');
+                    });
+                }
+                
+                closeImportMonitorDialog();
+                alert(`✅ 监控设备 "${name}" 已连接！\n\n如果画面未显示，请确认：\n1. 流媒体服务是否正常运行\n2. 网络连接是否正常\n3. 地址格式是否正确`);
+                
+            } catch (error) {
+                console.error('监控连接错误:', error);
+                alert('连接失败：' + error.message);
+            }
+        };
+        
+        function isValidMonitorUrl(url) {
+            const patterns = [
+                /^rtmp:\/\//i,
+                /^rtsp:\/\//i,
+                /^https?:\/\/.*\.m3u8/i,
+                /^https?:\/\/.*\.flv/i
+            ];
+            
+            return patterns.some(pattern => pattern.test(url));
+        }
+        
+        function simulateMonitorStream(videoElement, name) {
+            // 创建模拟的监控画面（实际项目中应使用真实流）
+            const canvas = document.createElement('canvas');
+            canvas.width = 640;
+            canvas.height = 480;
+            const ctx = canvas.getContext('2d');
+            
+            let frameCount = 0;
+            
+            function renderFrame() {
+                // 绘制模拟监控画面背景
+                ctx.fillStyle = '#001a33';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 绘制网格
+                ctx.strokeStyle = '#003366';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < canvas.width; i += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i, canvas.height);
+                    ctx.stroke();
+                }
+                for (let j = 0; j < canvas.height; j += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, j);
+                    ctx.lineTo(canvas.width, j);
+                    ctx.stroke();
+                }
+                
+                // 绘制时间戳
+                ctx.fillStyle = '#00ff88';
+                ctx.font = 'bold 20px Courier New';
+                const now = new Date();
+                ctx.fillText(now.toLocaleString(), 10, 30);
+                
+                // 绘制设备名称
+                ctx.fillText(name, 10, canvas.height - 15);
+                
+                // 绘制REC标志（闪烁）
+                if (frameCount % 60 < 30) {
+                    ctx.fillStyle = '#ff0000';
+                    ctx.beginPath();
+                    ctx.arc(canvas.width - 30, 25, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.fillText('REC', canvas.width - 50, 29);
+                }
+                
+                // 添加一些动态元素模拟真实监控
+                frameCount++;
+                const time = Date.now() / 1000;
+                
+                for (let i = 0; i < 5; i++) {
+                    const x = (Math.sin(time + i) * 0.5 + 0.5) * canvas.width;
+                    const y = (Math.cos(time * 0.7 + i * 2) * 0.5 + 0.5) * canvas.height;
+                    
+                    ctx.fillStyle = `rgba(0, 255, 136, ${0.3 + Math.sin(time * 2 + i) * 0.2})`;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 20 + Math.sin(time + i) * 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // 转换为视频源
+                videoElement.srcObject = canvas.captureStream(25);
+                
+                requestAnimationFrame(renderFrame);
+            }
+            
+            renderFrame();
+        }
+        
+        function showMonitorMessage(message) {
+            const container = document.getElementById('monitorVideoContainer');
+            const existingMsg = document.getElementById('monitorMessage');
+            if (existingMsg) existingMsg.remove();
+            
+            const msgDiv = document.createElement('div');
+            msgDiv.id = 'monitorMessage';
+            msgDiv.style.cssText = `
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.9);
+                border: 1px solid #00ff88;
+                border-radius: 8px;
+                padding: 20px;
+                color: #00ff88;
+                font-size: 14px;
+                text-align: center;
+                white-space: pre-line;
+                z-index: 100;
+                max-width: 80%;
+            `;
+            msgDiv.textContent = message;
+            container.appendChild(msgDiv);
+            
+            setTimeout(() => { if (msgDiv.parentNode) msgDiv.remove(); }, 5000);
+        }
+        
+        window.saveMonitorDevice = function() {
+            const name = document.getElementById('monitorNameInput').value.trim();
+            const url = document.getElementById('monitorUrlInput').value.trim();
+            const location = document.getElementById('monitorLocationSelect').value;
+            const status = document.getElementById('monitorStatusSelect').value;
+            
+            if (!name || !url) {
+                alert('请填写设备名称和流媒体地址！');
+                return;
+            }
+            
+            const device = {
+                id: Date.now(),
+                name: name,
+                url: url,
+                location: location,
+                status: status,
+                addedAt: new Date().toLocaleString()
+            };
+            
+            monitorDevices.push(device);
+            
+            // 保存到localStorage
+            localStorage.setItem('monitorDevices', JSON.stringify(monitorDevices));
+            
+            // 更新监控点位列表
+            updateMonitorList();
+            
+            alert(`✅ 设备已保存！\n\n名称：${name}\n位置：${location}\n状态：${status}\n\n共 ${monitorDevices.length} 个监控设备`);
+            
+            closeImportMonitorDialog();
+        };
+        
+        function updateMonitorList() {
+            const grid = document.querySelector('.monitor-grid');
+            if (!grid) return;
+            
+            // 清空现有项（保留前6个默认的）
+            while (grid.children.length > 6) {
+                grid.removeChild(grid.lastChild);
+            }
+            
+            // 添加新设备
+            monitorDevices.forEach(device => {
+                const item = document.createElement('div');
+                item.className = 'monitor-item';
+                item.innerHTML = `<div class="monitor-status" style="background: ${device.status === 'online' ? '#00ff00' : device.status === 'offline' ? '#ff4444' : '#ffaa00'}"></div>${device.name}`;
+                item.style.cursor = 'pointer';
+                item.onclick = () => {
+                    document.getElementById('monitorNameInput').value = device.name;
+                    document.getElementById('monitorUrlInput').value = device.url;
+                    document.getElementById('monitorLocationSelect').value = device.location;
+                    connectMonitor();
+                };
+                grid.appendChild(item);
+            });
+        }
+        
+        // 加载已保存的监控设备
+        function loadSavedMonitors() {
+            const saved = localStorage.getItem('monitorDevices');
+            if (saved) {
+                try {
+                    monitorDevices = JSON.parse(saved);
+                    updateMonitorList();
+                    console.log(`已加载 ${monitorDevices.length} 个监控设备`);
+                } catch (e) {
+                    console.error('加载监控设备失败:', e);
+                }
+            }
+        }
+
+        // 初始化
+        initMapEditor();
+        setupViewToggle();
+        loadSavedMonitors();
+    </script>
+</body>
+</html>

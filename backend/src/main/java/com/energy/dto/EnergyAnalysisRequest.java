@@ -14,4 +14,5 @@ public class EnergyAnalysisRequest {
     private LocalDateTime endTime;
     private String analysisType;
     private String userQuery;
+    private boolean skipAiAnalysis = false;
 }

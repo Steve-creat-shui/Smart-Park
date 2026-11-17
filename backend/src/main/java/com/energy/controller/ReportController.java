@@ -25,11 +25,14 @@ public class ReportController {
 
     @GetMapping("/report/{building_id}")
     public ResponseEntity<ApiResponse<EnergyAnalysisResponse>> getReport(
-            @PathVariable("building_id") String buildingId) {
+            @PathVariable("building_id") String buildingId,
+            @RequestParam(value = "start", required = false) String start,
+            @RequestParam(value = "end", required = false) String end) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         EnergyAnalysisRequest request = new EnergyAnalysisRequest();
         request.setBuildingId(buildingId);
-        request.setStartTime(LocalDateTime.now().minusMonths(1));
-        request.setEndTime(LocalDateTime.now());
+        request.setStartTime(start != null ? LocalDateTime.parse(start, fmt) : LocalDateTime.now().minusMonths(1));
+        request.setEndTime(end != null ? LocalDateTime.parse(end, fmt) : LocalDateTime.now());
         request.setAnalysisType("monthly_report");
         request.setUserQuery(String.format("请为建筑%s生成完整的月度能效分析报告。", buildingId));
         EnergyAnalysisResponse result = energyService.analyzeEnergy(request);

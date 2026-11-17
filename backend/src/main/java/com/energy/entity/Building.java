@@ -18,6 +18,9 @@ public class Building {
     @Column(name = "building_id", length = 50)
     private String buildingId;
 
+    @Column(name = "enterprise_id")
+    private Long enterpriseId;
+
     @Column(name = "building_name", length = 100)
     private String buildingName;
 

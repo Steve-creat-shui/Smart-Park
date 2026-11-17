@@ -6,7 +6,7 @@
       </div>
       <div class="config-form">
         <el-select v-model="form.buildingId" placeholder="选择建筑" style="width:160px">
-          <el-option v-for="id in buildingIds" :key="id" :label="id" :value="id" />
+          <el-option v-for="id in buildingIds" :key="id" :label="nameMap[id] || id" :value="id" />
         </el-select>
         <el-date-picker v-model="form.dateRange" type="monthrange"
           range-separator="至" start-placeholder="开始月份" end-placeholder="结束月份"
@@ -112,30 +112,37 @@
       </div>
 
       <div class="report-footer">
-        <div class="footer-disclaimer">本报告由建筑能源数字孪生管理系统自动生成，仅供参考。</div>
+        <div class="footer-disclaimer">本报告由鼎筑——建筑能源智能管理系统自动生成，仅供参考。</div>
         <div class="footer-time">报告生成时间：{{ generateTime }}</div>
       </div>
     </div>
 
+    <div v-else-if="reportLoading" class="loading-state">
+      <el-icon class="is-loading" :size="32" color="#00d4ff"><Loading /></el-icon>
+      <p style="color:#8bafc9;margin-top:12px">正在生成行政楼当月能效报告…</p>
+    </div>
     <el-empty v-else description="请配置报告参数后点击生成报告" class="empty-state" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { LineChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
 import { buildingApi, reportApi } from '../api/index.js'
+import { loadBuildingNames, buildingNameMap } from '../utils/buildingName.js'
 import { ElMessage } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import jsPDF from 'jspdf'
 import dayjs from 'dayjs'
 
 use([LineChart, BarChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const buildingIds = ref([])
+const nameMap = reactive(buildingNameMap)
 const reportLoading = ref(false)
 const exporting = ref(false)
 const reportData = ref(null)
@@ -196,14 +203,17 @@ const carbonTrendOption = computed(() => {
   }
 })
 
-const headerStyle = () => ({ background: '#0d1b2e', color: '#8bafc9', borderBottom: '1px solid #1a3a5c' })
-const cellStyle = () => ({ background: 'transparent', color: '#e0f0ff', borderBottom: '1px solid #1a3a5c11' })
+const headerStyle = () => ({ background: '#0f2540', color: '#8bafc9', borderBottom: '1px solid #1a3a5c' })
+const cellStyle = () => ({ background: '#0d1b2e', color: '#c0d8f0', borderBottom: '1px solid #1a3a5c' })
 
 async function generateReport() {
   if (!form.value.buildingId) { ElMessage.warning('请选择建筑'); return }
   reportLoading.value = true
   try {
-    const res = await reportApi.getReport(form.value.buildingId)
+    const params = {}
+    if (form.value.dateRange?.[0]) params.start = form.value.dateRange[0]
+    if (form.value.dateRange?.[1]) params.end = form.value.dateRange[1]
+    const res = await reportApi.getReport(form.value.buildingId, params)
     if (res.code === 200) {
       reportData.value = res.data
       generateTime.value = dayjs().format('YYYY-MM-DD HH:mm:ss')
@@ -294,15 +304,22 @@ function exportPDF() {
 
 onMounted(async () => {
   try {
+    await loadBuildingNames()
     const res = await buildingApi.getAllBuildingIds()
     if (res.code === 200) {
       buildingIds.value = res.data
-      if (res.data.length > 0) form.value.buildingId = res.data[0]
     }
   } catch {
-    buildingIds.value = ['B001', 'B002', 'B003', 'B004']
-    form.value.buildingId = 'B001'
+    buildingIds.value = []
   }
+  // 默认选中第一栋建筑 + 当前月份
+  form.value.buildingId = buildingIds.value[0] || ''
+  const now = dayjs()
+  const monthStart = now.startOf('month').format('YYYY-MM-DD HH:mm:ss')
+  const monthEnd = now.endOf('month').format('YYYY-MM-DD HH:mm:ss')
+  form.value.dateRange = [monthStart, monthEnd]
+  // 自动生成报告
+  await generateReport()
 })
 </script>
 
@@ -314,6 +331,7 @@ onMounted(async () => {
   border: 1px solid #1a3a5c;
   border-radius: 12px;
   padding: 16px;
+  box-shadow: 0 2px 8px rgba(26,188,156,0.06);
 }
 
 .config-form {
@@ -329,6 +347,7 @@ onMounted(async () => {
   border: 1px solid #1a3a5c;
   border-radius: 12px;
   padding: 24px;
+  box-shadow: 0 2px 8px rgba(26,188,156,0.06);
 }
 
 .report-header-section {
@@ -336,7 +355,7 @@ onMounted(async () => {
   align-items: center;
   gap: 20px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #00d4ff33;
+  border-bottom: 2px solid #00d4ff44;
   margin-bottom: 24px;
 }
 
@@ -366,7 +385,7 @@ onMounted(async () => {
 }
 
 .kpi-box {
-  background: #0a1628;
+  background: #0f2540;
   border: 1px solid #1a3a5c;
   border-radius: 10px;
   padding: 14px;
@@ -388,16 +407,17 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #0a1628;
+  background: #0f2540;
   border-radius: 10px;
   padding: 14px 16px;
+  border: 1px solid #1a3a5c;
 }
 .score-label { font-size: 13px; color: #8bafc9; white-space: nowrap; }
 .score-value { font-size: 13px; font-weight: 700; color: #e0f0ff; white-space: nowrap; }
 
 .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .chart-box {
-  background: #0a1628;
+  background: #0f2540;
   border: 1px solid #1a3a5c;
   border-radius: 10px;
   padding: 14px;
@@ -405,11 +425,11 @@ onMounted(async () => {
 .chart-sub-title { font-size: 13px; color: #8bafc9; margin-bottom: 8px; }
 
 .ai-result-box {
-  background: #0a1628;
+  background: #0f2540;
   border: 1px solid #1a3a5c;
   border-radius: 10px;
   padding: 16px;
-  color: #e0f0ff;
+  color: #c0d8f0;
   font-size: 13px;
   line-height: 1.8;
   white-space: pre-wrap;
@@ -423,6 +443,14 @@ onMounted(async () => {
   justify-content: space-between;
   font-size: 12px;
   color: #8bafc9;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 0;
 }
 
 .empty-state { margin: 60px auto; }

@@ -1,0 +1,12 @@
+package com.energy.repository;
+
+import com.energy.entity.ImportHistory;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
+
+public interface ImportHistoryRepository extends JpaRepository<ImportHistory, Long> {
+
+    List<ImportHistory> findByEnterpriseIdOrderByCreatedAtDesc(Long enterpriseId);
+
+    List<ImportHistory> findAllByOrderByCreatedAtDesc();
+}
